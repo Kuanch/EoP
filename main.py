@@ -1,20 +1,82 @@
-from fastapi import FastAPI, Request, Form, Response
+from fastapi import FastAPI, Request, Form, Response, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from itsdangerous import URLSafeTimedSerializer, BadSignature
 import secrets
+import bcrypt
+from datetime import datetime, timedelta
 
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+# CSRF protection
+SECRET_KEY = secrets.token_urlsafe(32)  # In production, store this securely
+csrf_serializer = URLSafeTimedSerializer(SECRET_KEY)
+
 # Simple session storage (in production, use Redis or database)
 sessions = {}
 
-# Hardcoded credentials
+# Login attempt tracking for rate limiting
+login_attempts = {}  # {ip: [timestamp1, timestamp2, ...]}
+
+# Hardcoded credentials with hashed password
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "password"
+# Password: "password" - hashed with bcrypt
+ADMIN_PASSWORD_HASH = bcrypt.hashpw("password".encode('utf-8'), bcrypt.gensalt())
+
+
+def generate_csrf_token() -> str:
+    """Generate a CSRF token"""
+    return csrf_serializer.dumps(secrets.token_urlsafe(16))
+
+
+def validate_csrf_token(token: str, max_age: int = 3600) -> bool:
+    """Validate a CSRF token (valid for 1 hour by default)"""
+    try:
+        csrf_serializer.loads(token, max_age=max_age)
+        return True
+    except BadSignature:
+        return False
+
+
+def check_rate_limit(ip: str, max_attempts: int = 5, window_minutes: int = 15) -> bool:
+    """Check if an IP has exceeded the rate limit for login attempts"""
+    now = datetime.now()
+    cutoff_time = now - timedelta(minutes=window_minutes)
+
+    # Clean old attempts
+    if ip in login_attempts:
+        login_attempts[ip] = [t for t in login_attempts[ip] if t > cutoff_time]
+    else:
+        login_attempts[ip] = []
+
+    # Check if limit exceeded
+    if len(login_attempts[ip]) >= max_attempts:
+        return False
+
+    return True
+
+
+def record_login_attempt(ip: str):
+    """Record a login attempt"""
+    if ip not in login_attempts:
+        login_attempts[ip] = []
+    login_attempts[ip].append(datetime.now())
+
+
+def verify_password(plain_password: str, hashed_password: bytes) -> bool:
+    """Verify a password against a bcrypt hash"""
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password)
 
 
 def create_session(username: str) -> str:
@@ -48,13 +110,57 @@ async def login_page(request: Request):
     if user:
         return RedirectResponse(url="/index", status_code=302)
 
-    return templates.TemplateResponse("login.html", {"request": request})
+    # Generate CSRF token
+    csrf_token = generate_csrf_token()
+
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "csrf_token": csrf_token
+    })
 
 
 @app.post("/login")
-async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+@limiter.limit("10/minute")  # Rate limit: 10 requests per minute per IP
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    csrf_token: str = Form(...)
+):
     """Handle login form submission"""
-    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+    # Get client IP
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Validate CSRF token
+    if not validate_csrf_token(csrf_token):
+        csrf_token_new = generate_csrf_token()
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": "Invalid or expired CSRF token. Please try again.",
+                "csrf_token": csrf_token_new
+            }
+        )
+
+    # Check rate limit (5 failed attempts per 15 minutes)
+    if not check_rate_limit(client_ip):
+        csrf_token_new = generate_csrf_token()
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": "Too many login attempts. Please try again in 15 minutes.",
+                "csrf_token": csrf_token_new
+            }
+        )
+
+    # Verify credentials
+    if username == ADMIN_USERNAME and verify_password(password, ADMIN_PASSWORD_HASH):
+        # Successful login - clear login attempts
+        if client_ip in login_attempts:
+            del login_attempts[client_ip]
+
         # Create session
         session_token = create_session(username)
 
@@ -69,10 +175,20 @@ async def login(request: Request, username: str = Form(...), password: str = For
         )
         return response
     else:
+        # Failed login - record attempt
+        record_login_attempt(client_ip)
+
+        # Generate new CSRF token
+        csrf_token_new = generate_csrf_token()
+
         # Invalid credentials
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "error": "Invalid username or password"}
+            {
+                "request": request,
+                "error": "Invalid username or password",
+                "csrf_token": csrf_token_new
+            }
         )
 
 
