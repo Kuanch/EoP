@@ -59,34 +59,105 @@ POSTGRES_PASSWORD=your_secure_password
 
 ### Getting Cloudflare Tunnel Token
 
-There are two ways to use Cloudflare Tunnel with Docker:
+There are **two different approaches** to using Cloudflare Tunnel:
+
+#### Understanding the Difference
+
+**Manual Setup (Traditional)**:
+```bash
+cloudflared tunnel login          # Get certificate
+cloudflared tunnel create myapp   # Create named tunnel
+# Edit config.yml
+cloudflared tunnel run myapp      # Run tunnel
+```
+
+**Token-Based Setup (Docker-Friendly)**:
+```bash
+cloudflared tunnel run --token eyJh...  # Single command!
+```
+
+The **token method** skips all the manual setup because the token contains everything (tunnel ID, credentials, account info). This is perfect for Docker!
+
+---
 
 #### Method 1: Using Tunnel Token (Recommended for Docker)
 
+**For NEW tunnels**, create via dashboard and get token:
+
 1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
-2. Navigate to **Access** → **Tunnels**
-3. Create a new tunnel or select existing one
-4. Click **Configure** → **Public Hostname**
-5. Add a public hostname pointing to `http://app:8000`
-6. Go back to tunnel overview, click on the tunnel name
-7. Copy the **Tunnel Token** (starts with `eyJh...`)
-8. Add to `.env` file:
+2. Navigate to **Networks** → **Tunnels**
+3. Click **Create a tunnel**
+4. Choose **Cloudflared** as connector type
+5. Give it a name (e.g., "fastapi-login")
+6. Click **Save tunnel**
+7. In the **Install connector** step, you'll see a command like:
+   ```bash
+   cloudflared tunnel run --token eyJhY2NvdW50...
    ```
-   CLOUDFLARE_TUNNEL_TOKEN=eyJh...your_token_here
+8. Copy just the token part (starts with `eyJh...`)
+9. Add to `.env` file:
    ```
+   CLOUDFLARE_TUNNEL_TOKEN=eyJhY2NvdW50...
+   ```
+10. In the dashboard, click **Next**, then configure **Public Hostnames**:
+    - Subdomain: `yourapp`
+    - Domain: `yourdomain.com`
+    - Service: `http://app:8000` (Note: use `app` not `localhost`!)
+11. Click **Save tunnel**
 
-#### Method 2: Using Tunnel Credentials (Alternative)
+**For EXISTING tunnels** (if you already created one manually):
 
-If you already have a tunnel configured with credentials file:
+1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
+2. Navigate to **Networks** → **Tunnels**
+3. Find your existing tunnel (e.g., "fastapi-login")
+4. Click the **three dots** (⋯) → **Configure**
+5. In the **Overview** tab, click on **your connector**
+6. Click **Install connector** or view the install command
+7. Copy the token from the command shown
+8. Add to `.env` file
 
-1. Locate your tunnel credentials: `~/.cloudflared/<UUID>.json`
-2. Mount it as volume in `docker-compose.yml`:
+---
+
+#### Method 2: Using Existing Tunnel Configuration (Alternative)
+
+**If you already created a tunnel manually** with `cloudflared tunnel create` and have:
+- `~/.cloudflared/<UUID>.json` (credentials file)
+- `~/.cloudflared/config.yml` (configuration file)
+
+You can use these files directly in Docker:
+
+1. **Update config.yml** to use Docker service name:
    ```yaml
-   cloudflared:
+   tunnel: <UUID>
+   credentials-file: /etc/cloudflared/<UUID>.json
+
+   ingress:
+     - hostname: yourapp.yourdomain.com
+       service: http://app:8000  # Changed from localhost to app
+     - service: http_status:404
+   ```
+
+2. **Uncomment Method 2 in docker-compose.yml**:
+   ```yaml
+   cloudflared-named:
+     image: cloudflare/cloudflared:latest
+     container_name: cloudflared-tunnel
+     command: tunnel --no-autoupdate run fastapi-login
      volumes:
        - ~/.cloudflared:/etc/cloudflared:ro
-     command: tunnel --no-autoupdate run <tunnel-name>
+     restart: unless-stopped
+     networks:
+       - app-network
+     depends_on:
+       - app
    ```
+
+3. **Start the tunnel**:
+   ```bash
+   docker-compose up -d cloudflared-named
+   ```
+
+**Important**: Change `http://localhost:8000` to `http://app:8000` in your config because inside Docker, services communicate using service names, not localhost!
 
 ---
 

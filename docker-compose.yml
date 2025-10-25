@@ -32,14 +32,31 @@ services:
       - app-network
 
   # Optional: Add Cloudflare Tunnel for HTTPS
-  # Uncomment to enable automatic HTTPS with Cloudflare Tunnel
-  # Set CLOUDFLARE_TUNNEL_TOKEN in .env file first!
+  # Choose ONE of the two methods below:
+
+  # METHOD 1: Using Tunnel Token (Recommended for new tunnels)
+  # Uncomment to enable. Set CLOUDFLARE_TUNNEL_TOKEN in .env file first!
   # cloudflared:
   #   image: cloudflare/cloudflared:latest
   #   container_name: cloudflared-tunnel
   #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
   #   env_file:
   #     - .env  # Load CLOUDFLARE_TUNNEL_TOKEN from .env
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+  #   depends_on:
+  #     - app
+
+  # METHOD 2: Using Existing Tunnel (If you already created tunnel manually)
+  # Requires: ~/.cloudflared/<UUID>.json and config.yml
+  # Uncomment to enable:
+  # cloudflared-named:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared-tunnel
+  #   command: tunnel --no-autoupdate run fastapi-login  # Use your tunnel name
+  #   volumes:
+  #     - ~/.cloudflared:/etc/cloudflared:ro  # Mount existing credentials
   #   restart: unless-stopped
   #   networks:
   #     - app-network
