@@ -16,6 +16,31 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+
+    # HSTS: Force HTTPS for 1 year (only works when served over HTTPS)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # Prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # Enable XSS filter
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Referrer policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    return response
+
+
 # Templates
 templates = Jinja2Templates(directory="templates")
 
@@ -47,6 +72,27 @@ def validate_csrf_token(token: str, max_age: int = 3600) -> bool:
         return True
     except BadSignature:
         return False
+
+
+def get_client_ip(request: Request) -> str:
+    """Get real client IP (works behind Cloudflare and other proxies)"""
+    # Cloudflare sets CF-Connecting-IP header
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip
+
+    # Fallback to X-Forwarded-For
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+
+    # Fallback to X-Real-IP
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+
+    # Fallback to direct connection
+    return request.client.host if request.client else "unknown"
 
 
 def check_rate_limit(ip: str, max_attempts: int = 5, window_minutes: int = 15) -> bool:
@@ -128,8 +174,8 @@ async def login(
     csrf_token: str = Form(...)
 ):
     """Handle login form submission"""
-    # Get client IP
-    client_ip = request.client.host if request.client else "unknown"
+    # Get client IP (works behind Cloudflare/proxies)
+    client_ip = get_client_ip(request)
 
     # Validate CSRF token
     if not validate_csrf_token(csrf_token):
@@ -170,8 +216,9 @@ async def login(
             key="session_token",
             value=session_token,
             httponly=True,
-            max_age=3600,  # 1 hour
-            samesite="lax"
+            secure=True,        # Only send over HTTPS
+            samesite="strict",  # Stronger CSRF protection with HTTPS
+            max_age=3600        # 1 hour
         )
         return response
     else:
