@@ -50,18 +50,17 @@ services:
 
   # METHOD 2: Using Existing Tunnel (If you already created tunnel manually)
   # Requires: ~/.cloudflared/<UUID>.json and config.yml
-  # Uncomment to enable:
-  # cloudflared-named:
-  #   image: cloudflare/cloudflared:latest
-  #   container_name: cloudflared-tunnel
-  #   command: tunnel --no-autoupdate run fastapi-login  # Use your tunnel name
-  #   volumes:
-  #     - ~/.cloudflared:/etc/cloudflared:ro  # Mount existing credentials
-  #   restart: unless-stopped
-  #   networks:
-  #     - app-network
-  #   depends_on:
-  #     - app
+  cloudflared-named:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config-docker.yml run
+    volumes:
+      - ~/.cloudflared:/etc/cloudflared:ro  # Mount existing credentials
+    restart: unless-stopped
+    networks:
+      - app-network
+    depends_on:
+      - app
 
   # Optional: Add Redis for session storage (for horizontal scaling)
   # Uncomment when scaling to multiple app instances
