@@ -41,7 +41,40 @@ venv/bin/python manage_users.py list
 
 See `USER_MANAGEMENT.md` for complete documentation.
 
-## Installation
+## Quick Start with Docker (Recommended)
+
+The easiest way to run the application on any computer:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Kuanch/EoP.git
+cd EoP
+
+# 2. Create data directory
+mkdir -p data
+
+# 3. Build and start the application
+docker-compose up -d
+
+# 4. Create admin user (first time only)
+docker exec -it fastapi-login-app python manage_users.py init
+docker exec -it fastapi-login-app python manage_users.py create admin
+
+# 5. Access the application
+# Open http://localhost:8000 in your browser
+```
+
+To stop the application:
+```bash
+docker-compose down
+```
+
+To view logs:
+```bash
+docker-compose logs -f app
+```
+
+## Installation (Without Docker)
 
 1. Create a virtual environment:
 ```bash
@@ -91,6 +124,48 @@ cloudflared tunnel --url http://localhost:8000
 
 For full setup instructions, see `CLOUDFLARE_TUNNEL_SETUP.md`.
 
+## Docker Deployment
+
+### Basic Usage
+
+The application includes Docker support for easy deployment:
+
+```bash
+# Build and run
+docker-compose up -d
+
+# Initialize database and create first user
+docker exec -it fastapi-login-app python manage_users.py init
+docker exec -it fastapi-login-app python manage_users.py create admin
+
+# View logs
+docker-compose logs -f app
+
+# Stop
+docker-compose down
+```
+
+### Scaling Options
+
+The `docker-compose.yml` includes commented sections for horizontal scaling:
+
+1. **Redis for Session Storage**: Uncomment the `redis` service to enable shared session storage across multiple app instances
+2. **PostgreSQL**: Uncomment the `postgres` service to replace SQLite for production deployments
+3. **Nginx Load Balancer**: Uncomment the `nginx` service to distribute traffic across multiple app instances
+4. **Cloudflare Tunnel**: Uncomment the `cloudflared` service to enable automatic HTTPS
+
+### Data Persistence
+
+Database is stored in `./data/users.db` (mounted as volume), so data persists across container restarts.
+
+### Environment Variables
+
+Configure via environment variables:
+
+- `DATABASE_URL`: Database connection string (default: `sqlite:///./data/users.db`)
+- `ENVIRONMENT`: Set to `production` for production mode
+- `CLOUDFLARE_TUNNEL_TOKEN`: For Cloudflare Tunnel (optional)
+
 ## Project Structure
 
 ```
@@ -101,12 +176,17 @@ fastapi-login-app/
 ├── templates/
 │   ├── login.html              # Login page
 │   └── index.html              # Dashboard page
-├── users.db                    # SQLite database (excluded from git)
-├── venv/                       # Virtual environment
-├── SECURITY.md                 # Security documentation
-├── USER_MANAGEMENT.md          # User management guide
-├── CLOUDFLARE_TUNNEL_SETUP.md  # HTTPS setup guide
-└── README.md                   # This file
+├── Dockerfile                  # Docker image definition
+├── docker-compose.yml          # Docker orchestration
+├── requirements.txt            # Python dependencies
+├── .dockerignore              # Docker build exclusions
+├── data/                      # Database directory (volume mount)
+│   └── users.db              # SQLite database
+├── venv/                      # Virtual environment (not in Docker)
+├── SECURITY.md                # Security documentation
+├── USER_MANAGEMENT.md         # User management guide
+├── CLOUDFLARE_TUNNEL_SETUP.md # HTTPS setup guide
+└── README.md                  # This file
 ```
 
 ## Security Status

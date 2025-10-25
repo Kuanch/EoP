@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # FastAPI application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi-login-app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount database directory for persistence
+      - ./data:/app/data
+      # Mount templates for easy updates without rebuild (optional)
+      - ./templates:/app/templates:ro
+    environment:
+      # Database path (SQLite)
+      - DATABASE_URL=sqlite:///./data/users.db
+      # Set to production mode
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/login').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+
+  # Optional: Add Cloudflare Tunnel for HTTPS
+  # Uncomment to enable automatic HTTPS with Cloudflare Tunnel
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared-tunnel
+  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+  #   depends_on:
+  #     - app
+
+  # Optional: Add Redis for session storage (for horizontal scaling)
+  # Uncomment when scaling to multiple app instances
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: redis-session
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+  # Optional: Add PostgreSQL for production database (for horizontal scaling)
+  # Uncomment when scaling to multiple app instances
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: postgres-db
+  #   environment:
+  #     - POSTGRES_USER=fastapi
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+  #     - POSTGRES_DB=fastapi_users
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U fastapi"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+  # Optional: Add Nginx for load balancing (for horizontal scaling)
+  # Uncomment when running multiple app instances
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: nginx-lb
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+  #   depends_on:
+  #     - app
+
+networks:
+  app-network:
+    driver: bridge
+
+# Volumes for data persistence
+volumes:
+  # Uncomment when using Redis
+  # redis-data:
+  #   driver: local
+
+  # Uncomment when using PostgreSQL
+  # postgres-data:
+  #   driver: local
