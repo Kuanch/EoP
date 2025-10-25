@@ -14,11 +14,13 @@ services:
       - ./data:/app/data
       # Mount templates for easy updates without rebuild (optional)
       - ./templates:/app/templates:ro
+    env_file:
+      - .env  # Load environment variables from .env file
     environment:
-      # Database path (SQLite)
-      - DATABASE_URL=sqlite:///./data/users.db
-      # Set to production mode
-      - ENVIRONMENT=production
+      # Override specific variables if needed
+      # These can also be set in .env file
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/users.db}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/login').read()"]
@@ -31,10 +33,13 @@ services:
 
   # Optional: Add Cloudflare Tunnel for HTTPS
   # Uncomment to enable automatic HTTPS with Cloudflare Tunnel
+  # Set CLOUDFLARE_TUNNEL_TOKEN in .env file first!
   # cloudflared:
   #   image: cloudflare/cloudflared:latest
   #   container_name: cloudflared-tunnel
   #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   env_file:
+  #     - .env  # Load CLOUDFLARE_TUNNEL_TOKEN from .env
   #   restart: unless-stopped
   #   networks:
   #     - app-network

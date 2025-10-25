@@ -56,6 +56,10 @@ sessions/
 .pytest_cache/
 .coverage
 htmlcov/
+cookies.txt
 
 # FastAPI
 .cache/
+
+# Docker
+data/
