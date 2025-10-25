@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Form, Response, HTTPException
+from fastapi import FastAPI, Request, Form, Response, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -6,9 +6,15 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from itsdangerous import URLSafeTimedSerializer, BadSignature
+from sqlalchemy.orm import Session
 import secrets
-import bcrypt
 from datetime import datetime, timedelta
+
+# Import database functions
+from database import get_db, authenticate_user, init_db
+
+# Initialize database on startup
+init_db()
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -53,11 +59,6 @@ sessions = {}
 
 # Login attempt tracking for rate limiting
 login_attempts = {}  # {ip: [timestamp1, timestamp2, ...]}
-
-# Hardcoded credentials with hashed password
-ADMIN_USERNAME = "admin"
-# Password: "password" - hashed with bcrypt
-ADMIN_PASSWORD_HASH = bcrypt.hashpw("password".encode('utf-8'), bcrypt.gensalt())
 
 
 def generate_csrf_token() -> str:
@@ -120,11 +121,6 @@ def record_login_attempt(ip: str):
     login_attempts[ip].append(datetime.now())
 
 
-def verify_password(plain_password: str, hashed_password: bytes) -> bool:
-    """Verify a password against a bcrypt hash"""
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password)
-
-
 def create_session(username: str) -> str:
     """Create a session token for a user"""
     session_token = secrets.token_urlsafe(32)
@@ -171,7 +167,8 @@ async def login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    csrf_token: str = Form(...)
+    csrf_token: str = Form(...),
+    db: Session = Depends(get_db)
 ):
     """Handle login form submission"""
     # Get client IP (works behind Cloudflare/proxies)
@@ -201,8 +198,9 @@ async def login(
             }
         )
 
-    # Verify credentials
-    if username == ADMIN_USERNAME and verify_password(password, ADMIN_PASSWORD_HASH):
+    # Verify credentials using database
+    user = authenticate_user(db, username, password)
+    if user:
         # Successful login - clear login attempts
         if client_ip in login_attempts:
             del login_attempts[client_ip]
