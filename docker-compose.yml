@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # FastAPI application
   app:
@@ -22,6 +20,15 @@ services:
       - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/users.db}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     restart: unless-stopped
+    # Resource limits to prevent DoS attacks
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/login').read()"]
       interval: 30s
@@ -123,12 +130,9 @@ networks:
   app-network:
     driver: bridge
 
-# Volumes for data persistence
-volumes:
-  # Uncomment when using Redis
-  # redis-data:
-  #   driver: local
-
-  # Uncomment when using PostgreSQL
-  # postgres-data:
-  #   driver: local
+# Volumes for data persistence (uncomment when needed)
+# volumes:
+#   redis-data:
+#     driver: local
+#   postgres-data:
+#     driver: local
