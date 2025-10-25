@@ -2,6 +2,8 @@
 
 Complete guide for deploying the FastAPI login application using Docker and Docker Compose.
 
+> **Security Note**: This application has production-grade security features including rate limiting, CSRF protection, and resource limits. See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for comprehensive security documentation.
+
 ## Quick Start
 
 ```bash
@@ -544,13 +546,36 @@ chmod 600 .env
 
 ### 2. Use Strong Passwords
 
+**CRITICAL**: Always use strong passwords, especially if experiencing attacks.
+
 Generate secure passwords:
 ```bash
+# For admin user (recommended)
+openssl rand -base64 32
+# Output: 44-character random password
+
 # For PostgreSQL
 openssl rand -base64 32
 
 # For session secret
 openssl rand -hex 32
+```
+
+When creating the admin user in Docker:
+```bash
+# Generate password first
+ADMIN_PASS=$(openssl rand -base64 32)
+
+# Save it securely
+echo "Admin Password: $ADMIN_PASS" > ~/SECURE_CREDENTIALS.txt
+chmod 600 ~/SECURE_CREDENTIALS.txt
+
+# Create user with strong password
+docker exec -i fastapi-login-app python manage_users.py create admin <<EOF
+$ADMIN_PASS
+$ADMIN_PASS
+admin@yourdomain.com
+EOF
 ```
 
 ### 3. Update Images Regularly
@@ -624,18 +649,24 @@ networks:
 
 ### Resource Limits
 
+**ENABLED BY DEFAULT** for security against DoS attacks.
+
+Current configuration in docker-compose.yml:
 ```yaml
 services:
   app:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1.0'      # Maximum 1 CPU core
+          memory: 512M     # Maximum 512MB RAM
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.25'     # Minimum guaranteed
+          memory: 128M
 ```
+
+These limits prevent resource exhaustion attacks and ensure system stability.
+
 
 ### Custom DNS
 
