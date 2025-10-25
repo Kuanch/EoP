@@ -7,7 +7,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from itsdangerous import URLSafeTimedSerializer, BadSignature
 from sqlalchemy.orm import Session
+from typing import Optional
 import secrets
+import os
 from datetime import datetime, timedelta
 
 # Import database functions
@@ -15,6 +17,9 @@ from database import get_db, authenticate_user, init_db
 
 # Initialize database on startup
 init_db()
+
+# Environment detection for cookie security
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -128,7 +133,7 @@ def create_session(username: str) -> str:
     return session_token
 
 
-def get_current_user(request: Request) -> str | None:
+def get_current_user(request: Request) -> Optional[str]:
     """Get current user from session cookie"""
     session_token = request.cookies.get("session_token")
     if session_token and session_token in sessions:
@@ -214,8 +219,8 @@ async def login(
             key="session_token",
             value=session_token,
             httponly=True,
-            secure=True,        # Only send over HTTPS
-            samesite="strict",  # Stronger CSRF protection with HTTPS
+            secure=IS_PRODUCTION,    # Only send over HTTPS in production
+            samesite="strict" if IS_PRODUCTION else "lax",  # Strict in production, lax for local dev
             max_age=3600        # 1 hour
         )
         return response

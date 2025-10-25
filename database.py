@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from typing import Optional
 import bcrypt
 import os
 
@@ -52,12 +53,12 @@ def get_db():
         db.close()
 
 
-def get_user_by_username(db, username: str) -> User | None:
+def get_user_by_username(db, username: str) -> Optional[User]:
     """Get user by username."""
     return db.query(User).filter(User.username == username).first()
 
 
-def get_user_by_id(db, user_id: int) -> User | None:
+def get_user_by_id(db, user_id: int) -> Optional[User]:
     """Get user by ID."""
     return db.query(User).filter(User.id == user_id).first()
 
@@ -72,7 +73,7 @@ def create_user(db, username: str, password: str, email: str = None) -> User:
     return user
 
 
-def authenticate_user(db, username: str, password: str) -> User | None:
+def authenticate_user(db, username: str, password: str) -> Optional[User]:
     """Authenticate user with username and password."""
     user = get_user_by_username(db, username)
     if not user:
