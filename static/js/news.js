@@ -22,7 +22,10 @@ const News = {
     },
 
     onData(newArticles) {
-        this.articles = newArticles.concat(this.articles).slice(0, 200);
+        // Deduplicate by url_hash
+        const seen = new Set(this.articles.map(a => a.url_hash));
+        const fresh = newArticles.filter(a => !seen.has(a.url_hash));
+        this.articles = fresh.concat(this.articles).slice(0, 200);
         this.render();
     },
 
@@ -42,9 +45,16 @@ const News = {
         const feed = document.getElementById('news-feed');
         if (!feed) return;
 
-        const filtered = this.activeSource === 'All'
+        let filtered = this.activeSource === 'All'
             ? this.articles
             : this.articles.filter(a => a.source === this.activeSource);
+
+        // Sort by newest first (published date, then collected_at fallback)
+        filtered = [...filtered].sort((a, b) => {
+            const ta = new Date(a.published || a.collected_at || 0).getTime();
+            const tb = new Date(b.published || b.collected_at || 0).getTime();
+            return tb - ta;
+        });
 
         feed.innerHTML = filtered.map(a => {
             const threatClass = a.threat_score >= 15 ? 'high-threat' : a.threat_score >= 8 ? 'medium-threat' : '';

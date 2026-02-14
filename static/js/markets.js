@@ -118,7 +118,7 @@ const Markets = {
             <div style="height:${h}px;display:flex;align-items:center;justify-content:center;background:#131722;">
                 <div style="text-align:center;">
                     <span class="loader-spin"></span>
-                    <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">${loadedCount}/${total} loaded</div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">loading</div>
                 </div>
             </div>
         </div>`;

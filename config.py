@@ -19,7 +19,9 @@ OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD", "")
 NEWS_FEEDS = {
     "BBC World": "https://feeds.bbci.co.uk/news/world/rss.xml",
     "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
-    "CNA": "https://www.cna.com.tw/rss/aall.xml",
+    "CNA World": "https://feeds.feedburner.com/rsscna/intworld",
+    "CNA Mainland": "https://feeds.feedburner.com/rsscna/mainland",
+    "CBS World": "https://www.cbsnews.com/latest/rss/world",
 }
 
 # Market symbols

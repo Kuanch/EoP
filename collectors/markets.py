@@ -127,43 +127,18 @@ class MarketsCollector(BaseCollector):
         self._crypto_chart_loaded = False
         self._poly_cycle = 0
 
+    def _build_broadcast(self):
+        return {
+            "forex": market_cache["forex"],
+            "stocks": market_cache["stocks"],
+            "crypto": market_cache["crypto"],
+            "fear_greed": market_cache["fear_greed"],
+            "intraday": market_cache["intraday"],
+        }
+
     async def collect(self):
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": HTTP_USER_AGENT}) as client:
-            if POLYGON_API_KEY:
-                all_tickers = [
-                    *[(n, s, market_cache["forex"]) for n, s in FOREX_SYMBOLS.items()],
-                    *[(n, s, market_cache["stocks"]) for n, s in MARKET_SYMBOLS.items()],
-                ]
-
-                if not self._poly_loaded:
-                    # First run: load all tickers with rate-limit delays
-                    # Broadcast after each ticker so frontend shows progress
-                    for name, symbol, cache in all_tickers:
-                        ok = await _polygon_fetch_prev(client, name, symbol, cache)
-                        if not ok:
-                            break
-                        await manager.broadcast("markets", {
-                            "forex": market_cache["forex"],
-                            "stocks": market_cache["stocks"],
-                            "crypto": market_cache["crypto"],
-                            "fear_greed": market_cache["fear_greed"],
-                            "intraday": market_cache["intraday"],
-                        })
-                        await asyncio.sleep(POLYGON_DELAY)
-                    if market_cache["forex"] or market_cache["stocks"]:
-                        self._poly_loaded = True
-                else:
-                    # Subsequent: rotate 2 tickers per cycle
-                    for i in range(min(2, len(all_tickers))):
-                        idx = (self._poly_cycle + i) % len(all_tickers)
-                        name, symbol, cache = all_tickers[idx]
-                        ok = await _polygon_fetch_prev(client, name, symbol, cache)
-                        if not ok:
-                            break
-                        await asyncio.sleep(POLYGON_DELAY)
-                    self._poly_cycle = (self._poly_cycle + 2) % len(all_tickers)
-
-            # Crypto from CoinGecko - 1 day chart (5-min resolution)
+            # --- CoinGecko first (no rate limit, loads instantly) ---
             try:
                 resp = await client.get(COINGECKO_PRICE_URL, params={
                     "ids": ",".join(CRYPTO_IDS),
@@ -182,59 +157,68 @@ class MarketsCollector(BaseCollector):
                                 "name": name,
                                 "price": round(price, 2),
                                 "change_pct": round(change_pct, 2) if change_pct else 0,
-                                "is_open": True,  # Crypto is 24/7
+                                "is_open": True,
                             }
 
-                if not self._crypto_chart_loaded:
-                    for coin_id in CRYPTO_IDS:
-                        try:
-                            name = coin_id.capitalize()
-                            url = COINGECKO_CHART_URL.format(coin_id=coin_id)
-                            resp2 = await client.get(url, params={
-                                "vs_currency": "usd",
-                                "days": "1",
-                            })
-                            if resp2.status_code == 200:
-                                chart_data = resp2.json()
-                                prices = chart_data.get("prices", [])
-                                if prices:
-                                    series = [{"t": int(p[0]), "p": p[1]} for p in prices]
-                                    market_cache["intraday"][name] = series
-                                    if len(prices) >= 2:
-                                        market_cache["crypto"][name]["prev_close"] = round(prices[0][1], 2)
+                # 1-day chart (~289 points, 5-min resolution)
+                for coin_id in CRYPTO_IDS:
+                    try:
+                        name = coin_id.capitalize()
+                        url = COINGECKO_CHART_URL.format(coin_id=coin_id)
+                        resp2 = await client.get(url, params={
+                            "vs_currency": "usd",
+                            "days": "1",
+                        })
+                        if resp2.status_code == 200:
+                            chart_data = resp2.json()
+                            prices = chart_data.get("prices", [])
+                            if prices:
+                                series = [{"t": int(p[0]), "p": p[1]} for p in prices]
+                                market_cache["intraday"][name] = series
+                                if len(prices) >= 2:
+                                    market_cache["crypto"][name]["prev_close"] = round(prices[0][1], 2)
+                            if not self._crypto_chart_loaded:
                                 logger.info(f"[markets] CoinGecko 1d chart for {name}: {len(prices)} points")
-                            elif resp2.status_code == 429:
-                                logger.warning(f"[markets] CoinGecko rate limited for {name}")
-                            await asyncio.sleep(2)
-                        except Exception as e:
-                            logger.error(f"[markets] CoinGecko chart {coin_id}: {e}")
-                    self._crypto_chart_loaded = True
-                else:
-                    # Refresh 1-day chart periodically (every 5 min via collect cycle)
-                    for coin_id in CRYPTO_IDS:
-                        try:
-                            name = coin_id.capitalize()
-                            url = COINGECKO_CHART_URL.format(coin_id=coin_id)
-                            resp2 = await client.get(url, params={
-                                "vs_currency": "usd",
-                                "days": "1",
-                            })
-                            if resp2.status_code == 200:
-                                chart_data = resp2.json()
-                                prices = chart_data.get("prices", [])
-                                if prices:
-                                    series = [{"t": int(p[0]), "p": p[1]} for p in prices]
-                                    market_cache["intraday"][name] = series
-                                    if len(prices) >= 2:
-                                        market_cache["crypto"][name]["prev_close"] = round(prices[0][1], 2)
-                            await asyncio.sleep(2)
-                        except Exception:
-                            pass
+                        elif resp2.status_code == 429:
+                            logger.warning(f"[markets] CoinGecko rate limited for {name}")
+                        await asyncio.sleep(2)
+                    except Exception as e:
+                        logger.error(f"[markets] CoinGecko chart {coin_id}: {e}")
+                self._crypto_chart_loaded = True
+
+                # Broadcast crypto immediately so frontend shows them right away
+                await manager.broadcast("markets", self._build_broadcast())
 
             except Exception as e:
                 logger.error(f"[markets] CoinGecko: {e}")
 
-            # Fear & Greed (still fetch, just won't render gauge)
+            # --- Polygon (rate limited, 13s between requests) ---
+            if POLYGON_API_KEY:
+                all_tickers = [
+                    *[(n, s, market_cache["forex"]) for n, s in FOREX_SYMBOLS.items()],
+                    *[(n, s, market_cache["stocks"]) for n, s in MARKET_SYMBOLS.items()],
+                ]
+
+                if not self._poly_loaded:
+                    for name, symbol, cache in all_tickers:
+                        ok = await _polygon_fetch_prev(client, name, symbol, cache)
+                        if not ok:
+                            break
+                        await manager.broadcast("markets", self._build_broadcast())
+                        await asyncio.sleep(POLYGON_DELAY)
+                    if market_cache["forex"] or market_cache["stocks"]:
+                        self._poly_loaded = True
+                else:
+                    for i in range(min(2, len(all_tickers))):
+                        idx = (self._poly_cycle + i) % len(all_tickers)
+                        name, symbol, cache = all_tickers[idx]
+                        ok = await _polygon_fetch_prev(client, name, symbol, cache)
+                        if not ok:
+                            break
+                        await asyncio.sleep(POLYGON_DELAY)
+                    self._poly_cycle = (self._poly_cycle + 2) % len(all_tickers)
+
+            # --- Fear & Greed ---
             self._fg_counter += self.interval
             if self._fg_counter >= 900:
                 self._fg_counter = 0
@@ -250,12 +234,4 @@ class MarketsCollector(BaseCollector):
                 except Exception as e:
                     logger.error(f"[markets] Fear&Greed: {e}")
 
-        broadcast_data = {
-            "forex": market_cache["forex"],
-            "stocks": market_cache["stocks"],
-            "crypto": market_cache["crypto"],
-            "fear_greed": market_cache["fear_greed"],
-            "intraday": market_cache["intraday"],
-        }
-        await manager.broadcast("markets", broadcast_data)
-        return broadcast_data
+        await manager.broadcast("markets", self._build_broadcast())
