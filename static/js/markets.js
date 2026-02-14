@@ -3,8 +3,15 @@
 // Other forex, crypto, stocks = smaller secondary
 
 const Markets = {
-    data: { forex: {}, stocks: {}, crypto: {}, fear_greed: { value: 50, classification: 'Neutral' }, intraday: {}, history: {} },
+    data: { forex: {}, stocks: {}, crypto: {}, fear_greed: { value: 50, classification: 'Neutral' }, intraday: {} },
     dpr: window.devicePixelRatio || 1,
+    // Expected instruments: [name, category, size]
+    expected: [
+        ['EUR/USD', 'forex', 'primary'], ['Bitcoin', 'crypto', 'primary'],
+        ['GBP/USD', 'forex', 'secondary'], ['USD/JPY', 'forex', 'secondary'],
+        ['Ethereum', 'crypto', 'secondary'],
+        ['S&P 500', 'stocks', 'secondary'], ['NASDAQ', 'stocks', 'secondary'], ['Dow Jones', 'stocks', 'secondary'],
+    ],
 
     init() {
         WS.on('markets', (d) => { this.data = d; this.render(); });
@@ -18,11 +25,15 @@ const Markets = {
         } catch (e) { console.error('[Markets] Initial load:', e); }
     },
 
+    getLoaded() {
+        const all = { ...(this.data.forex || {}), ...(this.data.stocks || {}), ...(this.data.crypto || {}) };
+        return all;
+    },
+
     render() {
         this.renderTicker();
         this.renderPrimary();
         this.renderSecondary();
-        this.renderFearGreed();
     },
 
     renderTicker() {
@@ -36,68 +47,81 @@ const Markets = {
         el.innerHTML = items.map(i => {
             const dir = (i.change_pct || 0) >= 0 ? 'up' : 'down';
             const sign = dir === 'up' ? '+' : '';
+            const closed = i.is_open === false ? ' <span style="color:#555;font-size:10px;">CLOSED</span>' : '';
             return `<div class="ticker-item">
                 <span class="symbol">${i.name || i.symbol}</span>
                 <span class="price">${this.fmtPrice(i)}</span>
-                <span class="change ${dir}">${sign}${(i.change_pct || 0).toFixed(2)}%</span>
+                <span class="change ${dir}">${sign}${(i.change_pct || 0).toFixed(2)}%</span>${closed}
             </div>`;
         }).join('');
     },
 
-    // EUR/USD and Bitcoin as large charts
     renderPrimary() {
         const el = document.getElementById('primary-charts');
         if (!el) return;
+        const loaded = this.getLoaded();
+        const total = this.expected.length;
+        const loadedCount = Object.keys(loaded).length;
 
-        const primary = [];
-        const eurusd = (this.data.forex || {})['EUR/USD'];
-        if (eurusd) primary.push(['EUR/USD', eurusd]);
-        const btc = (this.data.crypto || {})['Bitcoin'];
-        if (btc) primary.push(['Bitcoin', btc]);
-
-        el.innerHTML = primary.map(([key, item]) => this.buildChartPanel(key, item, 'primary')).join('')
-            || '<div style="color:var(--text-secondary);padding:20px">Loading primary charts...</div>';
+        const panels = this.expected.filter(e => e[2] === 'primary').map(([name]) => {
+            if (loaded[name]) return this.buildChartPanel(name, loaded[name], 'primary');
+            return this.buildSkeleton(name, 'primary', loadedCount, total);
+        });
+        el.innerHTML = panels.join('');
 
         requestAnimationFrame(() => {
-            primary.forEach(([key, item]) => {
-                const canvasId = 'chart-' + key.replace(/[^a-zA-Z0-9]/g, '');
-                const series = (this.data.intraday || {})[key] || [];
-                const prevClose = item.prev_close || (series.length > 1 ? series[series.length - 2].p : item.price);
-                this.drawIntradayChart(canvasId, series, prevClose, item);
+            this.expected.filter(e => e[2] === 'primary').forEach(([name]) => {
+                if (!loaded[name]) return;
+                const canvasId = 'chart-' + name.replace(/[^a-zA-Z0-9]/g, '');
+                const series = (this.data.intraday || {})[name] || [];
+                const prevClose = loaded[name].prev_close || (series.length > 1 ? series[0].p : loaded[name].price);
+                this.drawIntradayChart(canvasId, series, prevClose, loaded[name]);
             });
         });
     },
 
-    // Other forex, crypto, stocks as smaller charts
     renderSecondary() {
         const el = document.getElementById('secondary-charts');
         if (!el) return;
+        const loaded = this.getLoaded();
+        const total = this.expected.length;
+        const loadedCount = Object.keys(loaded).length;
 
-        const secondary = [];
-        // Other forex (not EUR/USD)
-        for (const [k, v] of Object.entries(this.data.forex || {})) {
-            if (k !== 'EUR/USD') secondary.push([k, v]);
-        }
-        // Other crypto (not Bitcoin)
-        for (const [k, v] of Object.entries(this.data.crypto || {})) {
-            if (k !== 'Bitcoin') secondary.push([k, v]);
-        }
-        // All stocks
-        for (const [k, v] of Object.entries(this.data.stocks || {})) {
-            secondary.push([k, v]);
-        }
-
-        el.innerHTML = secondary.map(([key, item]) => this.buildChartPanel(key, item, 'secondary')).join('')
-            || '<div style="color:var(--text-secondary);padding:10px">Loading...</div>';
+        const panels = this.expected.filter(e => e[2] === 'secondary').map(([name]) => {
+            if (loaded[name]) return this.buildChartPanel(name, loaded[name], 'secondary');
+            return this.buildSkeleton(name, 'secondary', loadedCount, total);
+        });
+        el.innerHTML = panels.join('');
 
         requestAnimationFrame(() => {
-            secondary.forEach(([key, item]) => {
-                const canvasId = 'chart-' + key.replace(/[^a-zA-Z0-9]/g, '');
-                const series = (this.data.intraday || {})[key] || [];
-                const prevClose = item.prev_close || (series.length > 1 ? series[series.length - 2].p : item.price);
-                this.drawIntradayChart(canvasId, series, prevClose, item);
+            this.expected.filter(e => e[2] === 'secondary').forEach(([name]) => {
+                if (!loaded[name]) return;
+                const canvasId = 'chart-' + name.replace(/[^a-zA-Z0-9]/g, '');
+                const series = (this.data.intraday || {})[name] || [];
+                const prevClose = loaded[name].prev_close || (series.length > 1 ? series[0].p : loaded[name].price);
+                this.drawIntradayChart(canvasId, series, prevClose, loaded[name]);
             });
         });
+    },
+
+    buildSkeleton(name, size, loadedCount, total) {
+        const h = size === 'primary' ? 300 : 150;
+        return `<div class="chart-panel ${size}-panel" style="opacity:0.5;">
+            <div class="chart-header">
+                <div class="chart-title">
+                    <span class="chart-symbol">${name}</span>
+                </div>
+                <div class="chart-price-info">
+                    <span class="chart-price" style="color:var(--text-secondary);">—</span>
+                </div>
+            </div>
+            <div style="height:${h}px;display:flex;align-items:center;justify-content:center;background:#131722;">
+                <div style="text-align:center;">
+                    <span class="loader-spin"></span>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">${loadedCount}/${total} loaded</div>
+                </div>
+            </div>
+        </div>`;
     },
 
     buildChartPanel(key, item, size) {
@@ -109,15 +133,19 @@ const Markets = {
             ? `${sign}${this.fmtChange(item)} (${sign}${item.change_pct.toFixed(2)}%)`
             : `${sign}${item.change_pct.toFixed(2)}%`;
 
+        const closedBadge = item.is_open === false
+            ? '<span style="background:#333;color:#888;font-size:10px;padding:2px 6px;border-radius:3px;margin-left:8px;vertical-align:middle;">CLOSED</span>'
+            : '';
+
         const metaHtml = item.high !== undefined
-            ? `<div class="chart-meta"><span>H: ${this.fmtPrice(item, 'high')}</span><span>L: ${this.fmtPrice(item, 'low')}</span>${item.volume ? '<span>Vol: ' + this.fmtVol(item.volume) + '</span>' : ''}</div>`
+            ? `<div class="chart-meta"><span>O: ${this.fmtPrice(item, 'open')}</span><span>H: ${this.fmtPrice(item, 'high')}</span><span>L: ${this.fmtPrice(item, 'low')}</span>${item.volume ? '<span>Vol: ' + this.fmtVol(item.volume) + '</span>' : ''}</div>`
             : '';
 
         return `<div class="chart-panel ${size}-panel">
             <div class="chart-header">
                 <div class="chart-title">
                     <span class="chart-symbol">${item.symbol || key}</span>
-                    <span class="chart-name">${item.name || key}</span>
+                    <span class="chart-name">${item.name || key}</span>${closedBadge}
                 </div>
                 <div class="chart-price-info">
                     <span class="chart-price ${size === 'primary' ? 'large' : ''}">${this.fmtPrice(item)}</span>
@@ -147,7 +175,8 @@ const Markets = {
             ctx.fillStyle = '#555';
             ctx.font = '13px Segoe UI';
             ctx.textAlign = 'center';
-            ctx.fillText('Waiting for data...', w / 2, h / 2);
+            const msg = item.is_open === false ? 'Market Closed' : 'Waiting for data...';
+            ctx.fillText(msg, w / 2, h / 2);
             if (item.price) {
                 ctx.fillStyle = '#e0e0e0';
                 ctx.font = '18px Segoe UI';
@@ -248,18 +277,25 @@ const Markets = {
             ctx.fillText(this.fmtAxis(p, item), w - padding.right - 3, y + 3);
         }
 
-        // Time axis
+        // Time axis — always show HH:MM format (intraday focus)
         ctx.fillStyle = '#555';
         ctx.font = '9px Segoe UI';
         ctx.textAlign = 'center';
-        const step = Math.max(1, Math.floor(times.length / 5));
-        const isDaily = times.length > 1 && (times[1] - times[0]) > 3600000 * 12;
+        const step = Math.max(1, Math.floor(times.length / 6));
         for (let i = 0; i < times.length; i += step) {
             const d = new Date(times[i]);
-            const label = isDaily
-                ? (d.getMonth() + 1) + '/' + d.getDate()
-                : d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+            const label = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
             ctx.fillText(label, toX(i), h - 6);
+        }
+
+        // If market is closed, overlay a subtle "CLOSED" watermark
+        if (item.is_open === false) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.font = 'bold 28px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText('CLOSED', w / 2, h / 2 + 10);
+            ctx.restore();
         }
     },
 
@@ -270,23 +306,10 @@ const Markets = {
         canvas.getContext('2d').scale(this.dpr, this.dpr);
     },
 
-    renderFearGreed() {
-        const el = document.getElementById('fear-greed');
-        if (!el) return;
-        const fg = this.data.fear_greed;
-        const color = fg.value < 25 ? 'var(--red)' : fg.value < 50 ? 'var(--orange)' : fg.value < 75 ? 'var(--yellow)' : 'var(--green)';
-        el.innerHTML = `<div class="card fear-greed">
-            <div class="fg-value" style="color:${color}">${fg.value}</div>
-            <div class="fg-label">${fg.classification}</div>
-            <div class="fg-bar"><div class="fg-marker" style="left:${fg.value}%"></div></div>
-        </div>`;
-    },
-
     // Formatting helpers
     fmtPrice(item, field) {
         const p = field ? item[field] : item.price;
         if (p == null) return '-';
-        // Forex: 4-5 decimals, crypto/stocks: 2
         const sym = item.symbol || '';
         if (sym.startsWith('C:') || (item.price && item.price < 10 && item.price > 0.5)) {
             return p.toFixed(4);

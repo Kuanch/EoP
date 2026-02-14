@@ -234,11 +234,10 @@ async def api_markets():
     from collectors.markets import market_cache
     return JSONResponse({
         "forex": market_cache.get("forex", {}),
-        "stocks": market_cache["stocks"],
-        "crypto": market_cache["crypto"],
-        "fear_greed": market_cache["fear_greed"],
+        "stocks": market_cache.get("stocks", {}),
+        "crypto": market_cache.get("crypto", {}),
+        "fear_greed": market_cache.get("fear_greed", {}),
         "intraday": market_cache.get("intraday", {}),
-        "history": {k: list(v) for k, v in market_cache["history"].items()},
     })
 
 
@@ -252,6 +251,18 @@ async def api_military():
 async def api_cyber():
     from collectors.cyber import cyber_cache, stats_cache
     return JSONResponse({"events": cyber_cache, "stats": stats_cache})
+
+
+@app.get("/api/polymarket")
+async def api_polymarket():
+    from collectors.polymarket import polymarket_cache
+    return JSONResponse(polymarket_cache)
+
+
+@app.get("/api/pizzint")
+async def api_pizzint():
+    from collectors.pizzint import pizzint_cache
+    return JSONResponse(pizzint_cache)
 
 
 @app.get("/api/threats")
@@ -272,6 +283,8 @@ async def start_collectors():
     from collectors.markets import MarketsCollector
     from collectors.military import MilitaryCollector
     from collectors.cyber import CyberCollector
+    from collectors.pizzint import PizzIntCollector
+    from collectors.polymarket import PolymarketCollector
 
     news = NewsCollector()
     news.set_db(SessionLocal)
@@ -282,6 +295,8 @@ async def start_collectors():
     asyncio.create_task(MarketsCollector().run())
     asyncio.create_task(MilitaryCollector().run())
     asyncio.create_task(cyber.run())
+    asyncio.create_task(PizzIntCollector().run())
+    asyncio.create_task(PolymarketCollector().run())
     logger.info("All collectors started")
 
 

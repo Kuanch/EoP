@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
         tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
         contents.forEach(c => c.classList.toggle('active', c.id === 'tab-' + tabId));
         location.hash = tabId;
+        if (tabId === 'map' && MapView.map) {
+            setTimeout(() => MapView.map.invalidateSize(), 50);
+        }
     }
 
     tabs.forEach(btn => {

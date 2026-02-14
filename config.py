@@ -35,7 +35,6 @@ MARKET_SYMBOLS = {
     "S&P 500": "SPY",
     "NASDAQ": "QQQ",
     "Dow Jones": "DIA",
-    "Tesla": "TSLA",
 }
 
 CRYPTO_IDS = ["bitcoin", "ethereum"]
@@ -113,6 +112,19 @@ GEO_KEYWORDS = {
     "invasion": None,
     "war": None,
 }
+
+# Polymarket - Geopolitical prediction markets
+POLYMARKET_API_URL = "https://gamma-api.polymarket.com/events"
+POLYMARKET_POLL_INTERVAL = 300  # 5 minutes
+POLYMARKET_EVENTS = [
+    "will-china-invade-taiwan-before-2027",
+    "us-x-china-military-clash-before-2027",
+    "will-north-korea-invade-south-korea-before-2027",
+    "us-x-russia-military-clash-by-june-30-2026-249",
+    "will-the-us-invade-a-latin-american-country-in-2026",
+    "us-civil-war-before-2027",
+    "nuclear-weapon-detonation-by-march-31",
+]
 
 # HTTP request settings
 HTTP_TIMEOUT = 30

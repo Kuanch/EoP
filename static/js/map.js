@@ -123,6 +123,19 @@ const MapView = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Wait a tick for map tab to be in DOM
-    setTimeout(() => MapView.init(), 100);
+    // Defer init until map tab is first shown (Leaflet needs visible container)
+    const observer = new MutationObserver(() => {
+        const mapTab = document.getElementById('tab-map');
+        if (mapTab && mapTab.classList.contains('active')) {
+            observer.disconnect();
+            setTimeout(() => MapView.init(), 50);
+        }
+    });
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    // Also try immediately in case map tab is already active
+    const mapTab = document.getElementById('tab-map');
+    if (mapTab && mapTab.classList.contains('active')) {
+        observer.disconnect();
+        setTimeout(() => MapView.init(), 50);
+    }
 });

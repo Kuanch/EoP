@@ -17,12 +17,33 @@
 <div id="tab-markets" class="tab-content">
     <div id="market-ticker" class="market-ticker"></div>
     <div id="primary-charts" class="primary-grid"></div>
-    <div id="fear-greed"></div>
     <div id="secondary-charts" class="secondary-grid"></div>
 </div>
 
 <!-- Military Tab -->
 <div id="tab-military" class="tab-content">
+    <div id="pizzint-panel" class="card" style="margin-bottom:16px; display:none;">
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+                <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Pentagon Pizza Index</div>
+                <div style="display:flex; align-items:baseline; gap:10px; margin-top:4px;">
+                    <span id="pizzint-level" style="font-size:32px; font-weight:700;"></span>
+                    <span id="pizzint-label" style="font-size:14px; color:var(--text-secondary);"></span>
+                </div>
+            </div>
+            <div style="flex:1; min-width:200px;">
+                <div id="pizzint-assessment" style="font-size:12px; color:var(--text-secondary); line-height:1.4;"></div>
+            </div>
+            <div id="pizzint-markets" style="font-size:11px; color:var(--text-secondary);"></div>
+            <div style="font-size:10px; color:var(--text-secondary);">
+                <span id="pizzint-time"></span> · <a href="https://www.pizzint.watch/" target="_blank" rel="noopener" style="color:var(--accent);">pizzint.watch</a>
+            </div>
+        </div>
+    </div>
+    <div id="polymarket-panel" class="card" style="margin-bottom:16px; display:none;">
+        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">Polymarket Geopolitical Conflict Odds</div>
+        <div id="polymarket-events" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:8px;"></div>
+    </div>
     <div id="military-summary" class="region-summary"></div>
     <div id="military-table"></div>
 </div>
