@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye of Providence</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>.dark-tooltip { background: #16213e; color: #e0e0e0; border: 1px solid #2a2a4a; } .dark-tooltip .leaflet-tooltip-arrow { display: none; }</style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="brand">
+            <span class="eye">&#9651;</span>
+            <span>Eye of Providence</span>
+        </div>
+        <div class="right">
+            <span id="ws-status" class="ws-status" title="WebSocket status"></span>
+            <span class="username">{{ username }}</span>
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+    </nav>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="news">News</button>
+        <button class="tab-btn" data-tab="markets">Markets</button>
+        <button class="tab-btn" data-tab="military">Military</button>
+        <button class="tab-btn" data-tab="cyber">Cyber</button>
+        <button class="tab-btn" data-tab="map">Map</button>
+    </div>
+
+    {% block content %}{% endblock %}
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/ws.js"></script>
+    <script src="/static/js/news.js"></script>
+    <script src="/static/js/markets.js"></script>
+    <script src="/static/js/military.js"></script>
+    <script src="/static/js/cyber.js"></script>
+    <script src="/static/js/map.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 """Database models and configuration for user management."""
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Float, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -37,6 +37,38 @@ class User(Base):
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', active={self.is_active})>"
+
+
+class Article(Base):
+    """News article model."""
+    __tablename__ = "articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    url_hash = Column(String(16), unique=True, index=True, nullable=False)
+    title = Column(String(500), nullable=False)
+    summary = Column(Text, nullable=True)
+    source = Column(String(50), nullable=False)
+    url = Column(String(1000), nullable=True)
+    published = Column(String(100), nullable=True)
+    geo_region = Column(String(100), nullable=True)
+    geo_lat = Column(Float, nullable=True)
+    geo_lon = Column(Float, nullable=True)
+    threat_score = Column(Float, default=0)
+    collected_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ThreatEvent(Base):
+    """Cyber threat event model."""
+    __tablename__ = "threat_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(50), nullable=False)
+    title = Column(String(500), nullable=False)
+    severity = Column(String(20), nullable=False)
+    source = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    ioc_count = Column(Integer, default=0)
+    collected_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():

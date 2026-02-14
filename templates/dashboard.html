@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- News Tab -->
+<div id="tab-news" class="tab-content active">
+    <div id="news-filters" class="source-filter">
+        <button class="active" data-source="All">All</button>
+        <button data-source="BBC World">BBC</button>
+        <button data-source="Al Jazeera">Al Jazeera</button>
+        <button data-source="CNA">CNA</button>
+        <button data-source="Reuters">Reuters</button>
+    </div>
+    <div id="news-feed" class="news-feed"></div>
+</div>
+
+<!-- Markets Tab -->
+<div id="tab-markets" class="tab-content">
+    <div id="market-ticker" class="market-ticker"></div>
+    <div id="primary-charts" class="primary-grid"></div>
+    <div id="fear-greed"></div>
+    <div id="secondary-charts" class="secondary-grid"></div>
+</div>
+
+<!-- Military Tab -->
+<div id="tab-military" class="tab-content">
+    <div id="military-summary" class="region-summary"></div>
+    <div id="military-table"></div>
+</div>
+
+<!-- Cyber Tab -->
+<div id="tab-cyber" class="tab-content">
+    <div id="cyber-stats" class="cyber-stats"></div>
+    <div id="cyber-events"></div>
+</div>
+
+<!-- Map Tab -->
+<div id="tab-map" class="tab-content">
+    <div class="map-controls">
+        <label><input type="checkbox" class="map-layer-toggle" data-layer="heatmap" checked> News Heatmap</label>
+        <label><input type="checkbox" class="map-layer-toggle" data-layer="military" checked> Military Assets</label>
+        <label><input type="checkbox" class="map-layer-toggle" data-layer="regions" checked> Threat Regions</label>
+    </div>
+    <div id="threat-map"></div>
+</div>
+{% endblock %}

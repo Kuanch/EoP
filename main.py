@@ -1,24 +1,31 @@
-from fastapi import FastAPI, Request, Form, Response, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from itsdangerous import URLSafeTimedSerializer, BadSignature
-from sqlalchemy.orm import Session
-from typing import Optional
-import secrets
+import asyncio
+import logging
 import os
+import secrets
 from datetime import datetime, timedelta
+from typing import Optional
 
-# Import database functions
-from database import get_db, authenticate_user, init_db
+from fastapi import FastAPI, Request, Form, Depends, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from itsdangerous import URLSafeTimedSerializer, BadSignature
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+
+from database import get_db, authenticate_user, init_db, SessionLocal, Article
+from ws_manager import manager
+
+# Logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 # Initialize database on startup
 init_db()
 
-# Environment detection for cookie security
+# Environment detection
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
 # Rate limiter
@@ -27,52 +34,39 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Security headers middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    """Add security headers to all responses"""
     response = await call_next(request)
-
-    # HSTS: Force HTTPS for 1 year (only works when served over HTTPS)
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-
-    # Prevent MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
-
-    # Prevent clickjacking
     response.headers["X-Frame-Options"] = "DENY"
-
-    # Enable XSS filter
     response.headers["X-XSS-Protection"] = "1; mode=block"
-
-    # Referrer policy
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-
     return response
-
 
 # Templates
 templates = Jinja2Templates(directory="templates")
 
 # CSRF protection
-SECRET_KEY = secrets.token_urlsafe(32)  # In production, store this securely
+SECRET_KEY = secrets.token_urlsafe(32)
 csrf_serializer = URLSafeTimedSerializer(SECRET_KEY)
 
-# Simple session storage (in production, use Redis or database)
+# Session storage
 sessions = {}
 
-# Login attempt tracking for rate limiting
-login_attempts = {}  # {ip: [timestamp1, timestamp2, ...]}
+# Login attempt tracking
+login_attempts = {}
 
 
 def generate_csrf_token() -> str:
-    """Generate a CSRF token"""
     return csrf_serializer.dumps(secrets.token_urlsafe(16))
 
 
 def validate_csrf_token(token: str, max_age: int = 3600) -> bool:
-    """Validate a CSRF token (valid for 1 hour by default)"""
     try:
         csrf_serializer.loads(token, max_age=max_age)
         return True
@@ -81,93 +75,68 @@ def validate_csrf_token(token: str, max_age: int = 3600) -> bool:
 
 
 def get_client_ip(request: Request) -> str:
-    """Get real client IP (works behind Cloudflare and other proxies)"""
-    # Cloudflare sets CF-Connecting-IP header
     cf_ip = request.headers.get("CF-Connecting-IP")
     if cf_ip:
         return cf_ip
-
-    # Fallback to X-Forwarded-For
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
-
-    # Fallback to X-Real-IP
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
         return real_ip
-
-    # Fallback to direct connection
     return request.client.host if request.client else "unknown"
 
 
 def check_rate_limit(ip: str, max_attempts: int = 5, window_minutes: int = 15) -> bool:
-    """Check if an IP has exceeded the rate limit for login attempts"""
     now = datetime.now()
     cutoff_time = now - timedelta(minutes=window_minutes)
-
-    # Clean old attempts
     if ip in login_attempts:
         login_attempts[ip] = [t for t in login_attempts[ip] if t > cutoff_time]
     else:
         login_attempts[ip] = []
-
-    # Check if limit exceeded
-    if len(login_attempts[ip]) >= max_attempts:
-        return False
-
-    return True
+    return len(login_attempts[ip]) < max_attempts
 
 
 def record_login_attempt(ip: str):
-    """Record a login attempt"""
     if ip not in login_attempts:
         login_attempts[ip] = []
     login_attempts[ip].append(datetime.now())
 
 
 def create_session(username: str) -> str:
-    """Create a session token for a user"""
     session_token = secrets.token_urlsafe(32)
     sessions[session_token] = username
     return session_token
 
 
 def get_current_user(request: Request) -> Optional[str]:
-    """Get current user from session cookie"""
     session_token = request.cookies.get("session_token")
     if session_token and session_token in sessions:
         return sessions[session_token]
     return None
 
 
+# --- Routes ---
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """Redirect to login or index based on authentication"""
     user = get_current_user(request)
     if user:
-        return RedirectResponse(url="/index", status_code=302)
+        return RedirectResponse(url="/dashboard", status_code=302)
     return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    """Display login page"""
     user = get_current_user(request)
     if user:
-        return RedirectResponse(url="/index", status_code=302)
-
-    # Generate CSRF token
+        return RedirectResponse(url="/dashboard", status_code=302)
     csrf_token = generate_csrf_token()
-
-    return templates.TemplateResponse("login.html", {
-        "request": request,
-        "csrf_token": csrf_token
-    })
+    return templates.TemplateResponse("login.html", {"request": request, "csrf_token": csrf_token})
 
 
 @app.post("/login")
-@limiter.limit("10/minute")  # Rate limit: 10 requests per minute per IP
+@limiter.limit("10/minute")
 async def login(
     request: Request,
     username: str = Form(...),
@@ -175,93 +144,145 @@ async def login(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    """Handle login form submission"""
-    # Get client IP (works behind Cloudflare/proxies)
     client_ip = get_client_ip(request)
 
-    # Validate CSRF token
     if not validate_csrf_token(csrf_token):
         csrf_token_new = generate_csrf_token()
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": "Invalid or expired CSRF token. Please try again.",
-                "csrf_token": csrf_token_new
-            }
-        )
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Invalid or expired CSRF token. Please try again.", "csrf_token": csrf_token_new
+        })
 
-    # Check rate limit (5 failed attempts per 15 minutes)
     if not check_rate_limit(client_ip):
         csrf_token_new = generate_csrf_token()
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": "Too many login attempts. Please try again in 15 minutes.",
-                "csrf_token": csrf_token_new
-            }
-        )
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Too many login attempts. Please try again in 15 minutes.", "csrf_token": csrf_token_new
+        })
 
-    # Verify credentials using database
     user = authenticate_user(db, username, password)
     if user:
-        # Successful login - clear login attempts
         if client_ip in login_attempts:
             del login_attempts[client_ip]
-
-        # Create session
         session_token = create_session(username)
-
-        # Redirect to index with session cookie
-        response = RedirectResponse(url="/index", status_code=302)
+        response = RedirectResponse(url="/dashboard", status_code=302)
         response.set_cookie(
-            key="session_token",
-            value=session_token,
-            httponly=True,
-            secure=IS_PRODUCTION,    # Only send over HTTPS in production
-            samesite="strict" if IS_PRODUCTION else "lax",  # Strict in production, lax for local dev
-            max_age=3600        # 1 hour
+            key="session_token", value=session_token,
+            httponly=True, secure=IS_PRODUCTION,
+            samesite="strict" if IS_PRODUCTION else "lax",
+            max_age=3600
         )
         return response
     else:
-        # Failed login - record attempt
         record_login_attempt(client_ip)
-
-        # Generate new CSRF token
         csrf_token_new = generate_csrf_token()
-
-        # Invalid credentials
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": "Invalid username or password",
-                "csrf_token": csrf_token_new
-            }
-        )
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Invalid username or password", "csrf_token": csrf_token_new
+        })
 
 
+# Keep /index for backwards compat
 @app.get("/index", response_class=HTMLResponse)
-async def index(request: Request):
-    """Display index page (requires authentication)"""
+async def index_redirect(request: Request):
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-
-    return templates.TemplateResponse("index.html", {"request": request, "username": user})
+    return templates.TemplateResponse("dashboard.html", {"request": request, "username": user})
 
 
 @app.get("/logout")
 async def logout(request: Request):
-    """Logout user and destroy session"""
     session_token = request.cookies.get("session_token")
     if session_token and session_token in sessions:
         del sessions[session_token]
-
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie("session_token")
     return response
+
+
+# --- WebSocket ---
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    # Check session auth from cookie
+    session_token = websocket.cookies.get("session_token")
+    if not session_token or session_token not in sessions:
+        await websocket.close(code=4001)
+        return
+
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+# --- REST API ---
+
+@app.get("/api/news")
+async def api_news():
+    from collectors.news import articles_cache
+    return JSONResponse(articles_cache[-100:])
+
+
+@app.get("/api/markets")
+async def api_markets():
+    from collectors.markets import market_cache
+    return JSONResponse({
+        "forex": market_cache.get("forex", {}),
+        "stocks": market_cache["stocks"],
+        "crypto": market_cache["crypto"],
+        "fear_greed": market_cache["fear_greed"],
+        "intraday": market_cache.get("intraday", {}),
+        "history": {k: list(v) for k, v in market_cache["history"].items()},
+    })
+
+
+@app.get("/api/military")
+async def api_military():
+    from collectors.military import assets_cache
+    return JSONResponse(assets_cache)
+
+
+@app.get("/api/cyber")
+async def api_cyber():
+    from collectors.cyber import cyber_cache, stats_cache
+    return JSONResponse({"events": cyber_cache, "stats": stats_cache})
+
+
+@app.get("/api/threats")
+async def api_threats():
+    from collectors.news import articles_cache
+    from collectors.military import assets_cache
+    from collectors.cyber import cyber_cache
+    from scoring import compute_region_scores
+    scores = compute_region_scores(articles_cache, assets_cache, cyber_cache)
+    return JSONResponse(scores)
+
+
+# --- Background tasks ---
+
+@app.on_event("startup")
+async def start_collectors():
+    from collectors.news import NewsCollector
+    from collectors.markets import MarketsCollector
+    from collectors.military import MilitaryCollector
+    from collectors.cyber import CyberCollector
+
+    news = NewsCollector()
+    news.set_db(SessionLocal)
+    cyber = CyberCollector()
+    cyber.set_db(SessionLocal)
+
+    asyncio.create_task(news.run())
+    asyncio.create_task(MarketsCollector().run())
+    asyncio.create_task(MilitaryCollector().run())
+    asyncio.create_task(cyber.run())
+    logger.info("All collectors started")
 
 
 if __name__ == "__main__":
