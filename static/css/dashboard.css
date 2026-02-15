@@ -367,6 +367,18 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+/* Map tooltips */
+.dark-tooltip {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+    font-size: 11px;
+    line-height: 1.4;
+}
+.dark-tooltip::before {
+    border-top-color: var(--border) !important;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .navbar { padding: 10px 16px; }
