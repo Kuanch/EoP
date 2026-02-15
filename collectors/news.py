@@ -122,4 +122,16 @@ class NewsCollector(BaseCollector):
             await manager.broadcast("news", new_articles)
             logger.info(f"[news] Broadcast {len(new_articles)} new articles")
 
+            # Notify on high-threat articles
+            import notifier
+            for a in new_articles:
+                if a.get("threat_score", 0) > 5:
+                    await notifier.send(
+                        title=f"High Threat: {a['source']}",
+                        message=a["title"],
+                        priority="high",
+                        tags="warning",
+                        cooldown_key=f"news-{a['url_hash']}",
+                    )
+
         return new_articles
