@@ -12,6 +12,7 @@ services:
       - ./data:/app/data
       # Mount templates for easy updates without rebuild (optional)
       - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
     env_file:
       - .env  # Load environment variables from .env file
     environment:
@@ -25,7 +26,7 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 1G
         reservations:
           cpus: '0.25'
           memory: 128M

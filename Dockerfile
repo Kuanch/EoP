@@ -23,8 +23,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY main.py database.py manage_users.py ./
+COPY main.py database.py manage_users.py ws_manager.py config.py scoring.py ./
+COPY collectors/ ./collectors/
 COPY templates/ ./templates/
+COPY static/ ./static/
 
 # Create directory for SQLite database
 RUN mkdir -p /app/data

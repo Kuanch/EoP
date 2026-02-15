@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- News Tab -->
+<div id="tab-news" class="tab-content active">
+    <div id="news-filters" class="source-filter">
+        <button class="active" data-source="All">All</button>
+        <button data-source="BBC World">BBC</button>
+        <button data-source="Al Jazeera">Al Jazeera</button>
+        <button data-source="CNA World">CNA World</button>
+        <button data-source="CNA Mainland">CNA Mainland</button>
+        <button data-source="CBS World">CBS</button>
+    </div>
+    <div id="news-feed" class="news-feed"></div>
+</div>
+
+<!-- Markets Tab -->
+<div id="tab-markets" class="tab-content">
+    <div id="market-ticker" class="market-ticker"></div>
+    <div id="primary-charts" class="primary-grid"></div>
+    <div id="secondary-charts" class="secondary-grid"></div>
+</div>
+
+<!-- Military Tab -->
+<div id="tab-military" class="tab-content">
+    <div id="pizzint-panel" class="card" style="margin-bottom:16px; display:none;">
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+                <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Pentagon Pizza Index</div>
+                <div style="display:flex; align-items:baseline; gap:10px; margin-top:4px;">
+                    <span id="pizzint-level" style="font-size:32px; font-weight:700;"></span>
+                    <span id="pizzint-label" style="font-size:14px; color:var(--text-secondary);"></span>
+                </div>
+            </div>
+            <div style="flex:1; min-width:200px;">
+                <div id="pizzint-assessment" style="font-size:12px; color:var(--text-secondary); line-height:1.4;"></div>
+            </div>
+            <div id="pizzint-markets" style="font-size:11px; color:var(--text-secondary);"></div>
+            <div style="font-size:10px; color:var(--text-secondary);">
+                <span id="pizzint-time"></span> · <a href="https://www.pizzint.watch/" target="_blank" rel="noopener" style="color:var(--accent);">pizzint.watch</a>
+            </div>
+        </div>
+    </div>
+    <div id="polymarket-panel" class="card" style="margin-bottom:16px; display:none;">
+        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">Polymarket Geopolitical Conflict Odds</div>
+        <div id="polymarket-events" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:8px;"></div>
+    </div>
+    <div id="military-summary" class="region-summary"></div>
+    <div id="military-table"></div>
+</div>
+
+<!-- Cyber Tab -->
+<div id="tab-cyber" class="tab-content">
+    <div id="cyber-stats" class="cyber-stats"></div>
+    <div id="cyber-events"></div>
+</div>
+
+<!-- Map Tab -->
+<div id="tab-map" class="tab-content">
+    <div class="map-controls">
+        <button class="map-layer-btn active" data-layer="aircraft">Aircraft <span id="map-count-aircraft" class="map-count">0</span></button>
+        <button class="map-layer-btn active" data-layer="ships">Ships <span id="map-count-ships" class="map-count">0</span></button>
+        <button id="ship-filter-toggle" class="map-layer-btn" style="font-size:11px;">Filters ▼</button>
+    </div>
+    <div id="ship-filter-panel" class="ship-filter-panel" style="display:none;">
+        <div class="filter-row">
+            <label>Flag</label>
+            <select id="sf-country" class="filter-select">
+                <option value="">All Countries</option>
+                <option value="China" selected>China</option>
+                <option value="Taiwan">Taiwan</option>
+                <option value="United States">United States</option>
+                <option value="Japan">Japan</option>
+                <option value="South Korea">South Korea</option>
+                <option value="North Korea">North Korea</option>
+                <option value="Russia">Russia</option>
+                <option value="Singapore">Singapore</option>
+                <option value="Panama">Panama</option>
+                <option value="Liberia">Liberia</option>
+                <option value="Marshall Islands">Marshall Islands</option>
+                <option value="United Kingdom">United Kingdom</option>
+            </select>
+        </div>
+        <div class="filter-row">
+            <label>Type</label>
+            <select id="sf-type" class="filter-select">
+                <option value="">All Types</option>
+                <option value="Cargo">Cargo</option>
+                <option value="Tanker">Tanker</option>
+                <option value="Fishing">Fishing</option>
+                <option value="Military">Military</option>
+                <option value="Passenger">Passenger</option>
+                <option value="Tug">Tug</option>
+                <option value="Law Enforcement">Law Enforcement</option>
+                <option value="SAR">SAR</option>
+                <option value="Dredger">Dredger</option>
+                <option value="High-speed">High-speed</option>
+                <option value="Sailing">Sailing</option>
+                <option value="Yacht">Yacht</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+        <div class="filter-row">
+            <label>Min Speed</label>
+            <select id="sf-speed" class="filter-select">
+                <option value="0">Any</option>
+                <option value="0.5" selected>Moving (≥0.5 kn)</option>
+                <option value="3">≥3 kn</option>
+                <option value="8">≥8 kn</option>
+                <option value="15">≥15 kn</option>
+            </select>
+        </div>
+        <div class="filter-row filter-actions">
+            <span id="sf-result-count" class="filter-count">0 ships</span>
+            <button id="sf-apply" class="filter-apply-btn">Apply</button>
+            <button id="sf-reset" class="filter-reset-btn">Reset</button>
+        </div>
+    </div>
+    <div id="threat-map"></div>
+</div>
+{% endblock %}
