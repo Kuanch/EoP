@@ -5,15 +5,15 @@ import os
 # Polling intervals (seconds)
 NEWS_POLL_INTERVAL = 300       # 5 minutes
 MARKETS_POLL_INTERVAL = 60     # 1 minute
-FEAR_GREED_POLL_INTERVAL = 900 # 15 minutes
-MILITARY_POLL_INTERVAL = 120   # 2 minutes
+MILITARY_POLL_INTERVAL = 300   # 5 minutes (OpenSky free tier rate limits)
 CYBER_POLL_INTERVAL = 1800     # 30 minutes
+SHIPS_BROADCAST_INTERVAL = 30  # 30 seconds (batch AIS updates)
 
 # API Keys (from environment)
 OTX_API_KEY = os.getenv("OTX_API_KEY", "")
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY", "")
-OPENSKY_USERNAME = os.getenv("OPENSKY_USERNAME", "")
-OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD", "")
+AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
+# OpenSky credentials now loaded from opensky_credentials.json (OAuth2)
 
 # News RSS Feeds
 NEWS_FEEDS = {
@@ -127,6 +127,16 @@ POLYMARKET_EVENTS = [
     "us-civil-war-before-2027",
     "nuclear-weapon-detonation-by-march-31",
 ]
+
+# AISstream WebSocket
+AISSTREAM_WS_URL = "wss://stream.aisstream.io/v0/stream"
+
+# Ship tracking regions (lat/lon pairs for AISstream bounding boxes)
+SHIP_REGIONS = {
+    "Taiwan Strait": [[21.0, 116.0], [27.0, 123.0]],
+    "Singapore Strait": [[0.0, 100.0], [5.0, 108.0]],
+    "English Channel": [[49.0, -5.0], [52.0, 3.0]],
+}
 
 # HTTP request settings
 HTTP_TIMEOUT = 30

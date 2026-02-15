@@ -71,3 +71,13 @@
 - [x] F6.7: Layer toggle controls — checkboxes for heatmap, military, regions
 - [x] F6.8: Auto-refresh — real-time updates via WebSocket
 - [x] F6.9: REST API endpoint — GET /api/threats
+- [x] F6.10: AIS ship tracking — AISstream.io WebSocket for Taiwan Strait vessel positions
+- [x] F6.11: Ship layer — boat SVG icons colored by vessel type (cargo/tanker/fishing/military/passenger)
+- [x] F6.12: Layer toggle buttons — independent Aircraft/Ships toggle with live counts
+- [x] F6.13: Ship tooltips — name, MMSI, type, speed, heading
+- [x] F6.14: REST API endpoint — GET /api/ships
+
+## Future Features
+- [ ] ADS-B Exchange API — replace/supplement OpenSky with adsbexchange.com for richer aircraft data (military flags, aircraft type, registration)
+- [ ] Local ADS-B receiver — RTL-SDR dongle for ultra-low-latency Taiwan Strait aircraft coverage
+- [ ] Additional ship tracking regions — extend AIS monitoring beyond Taiwan Strait

@@ -48,8 +48,8 @@ docker exec -it fastapi-login-app python manage_users.py create admin
 |----------|----------|---------|
 | `POLYGON_API_KEY` | No | Polygon.io forex/stock data |
 | `OTX_API_KEY` | No | AlienVault OTX cyber threat pulses |
-| `OPENSKY_USERNAME` | No | OpenSky Network (higher rate limits) |
-| `OPENSKY_PASSWORD` | No | OpenSky Network password |
+
+OpenSky Network uses OAuth2 via `opensky_credentials.json` (not committed to git).
 
 ## Architecture
 
