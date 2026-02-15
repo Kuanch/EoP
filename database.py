@@ -8,8 +8,11 @@ from typing import Optional
 import bcrypt
 import os
 
-# Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./users.db")
+# Database configuration — store in data/ directory for security
+_db_dir = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(_db_dir, exist_ok=True)
+_default_db = f"sqlite:///{os.path.join(_db_dir, 'users.db')}"
+DATABASE_URL = os.getenv("DATABASE_URL", _default_db)
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
