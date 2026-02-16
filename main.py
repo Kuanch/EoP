@@ -349,6 +349,44 @@ async def api_threats(request: Request):
     return JSONResponse(scores)
 
 
+@app.get("/api/threats/feed")
+@limiter.limit("60/minute")
+async def api_threats_feed(request: Request):
+    if not _require_auth(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    from threat_engine import get_feed
+    return JSONResponse(get_feed())
+
+
+@app.get("/api/threats/stats")
+@limiter.limit("60/minute")
+async def api_threats_stats(request: Request):
+    if not _require_auth(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    from threat_engine import get_stats
+    return JSONResponse(get_stats())
+
+
+@app.get("/api/threats/config")
+@limiter.limit("30/minute")
+async def api_threats_config_get(request: Request):
+    if not _require_auth(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    from threat_engine import load_config
+    return JSONResponse(load_config())
+
+
+@app.post("/api/threats/config")
+@limiter.limit("10/minute")
+async def api_threats_config_post(request: Request):
+    if not _require_auth(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    from threat_engine import save_config
+    body = await request.json()
+    save_config(body)
+    return JSONResponse({"status": "ok"})
+
+
 # --- Background tasks ---
 
 @app.on_event("startup")

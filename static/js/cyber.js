@@ -59,4 +59,28 @@ const Cyber = {
     esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 };
 
-document.addEventListener('DOMContentLoaded', () => Cyber.init());
+document.addEventListener('DOMContentLoaded', () => {
+    Cyber.init();
+
+    // Cyber alerts toggle — syncs with threat_rules.json sources.cyber
+    const toggle = document.getElementById('cyber-alerts-toggle');
+    if (toggle) {
+        fetch('/api/threats/config').then(r => r.ok ? r.json() : null).then(cfg => {
+            if (cfg) toggle.checked = cfg.sources?.cyber ?? true;
+        }).catch(() => {});
+
+        toggle.addEventListener('change', async () => {
+            try {
+                const resp = await fetch('/api/threats/config');
+                if (!resp.ok) return;
+                const cfg = await resp.json();
+                cfg.sources.cyber = toggle.checked;
+                await fetch('/api/threats/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cfg),
+                });
+            } catch (e) { console.error('[Cyber] Toggle error:', e); }
+        });
+    }
+});

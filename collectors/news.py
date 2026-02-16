@@ -1,7 +1,9 @@
 """RSS news feed collector."""
 
+import calendar
 import hashlib
 import logging
+import time
 from datetime import datetime
 
 import feedparser
@@ -49,6 +51,13 @@ class NewsCollector(BaseCollector):
                         continue
                     feed = feedparser.parse(resp.text)
                     for entry in feed.entries[:20]:
+                        # Skip old articles (>6 hours)
+                        pub_parsed = entry.get("published_parsed")
+                        if pub_parsed:
+                            pub_ts = calendar.timegm(pub_parsed)
+                            if time.time() - pub_ts > 6 * 3600:
+                                continue
+
                         url_hash = hashlib.sha256(entry.get("link", "").encode()).hexdigest()[:16]
                         if url_hash in seen_hashes:
                             continue
@@ -122,16 +131,12 @@ class NewsCollector(BaseCollector):
             await manager.broadcast("news", new_articles)
             logger.info(f"[news] Broadcast {len(new_articles)} new articles")
 
-            # Notify on high-threat articles
-            import notifier
+            # Threat engine assessment
+            import threat_engine
             for a in new_articles:
-                if a.get("threat_score", 0) > 5:
-                    await notifier.send(
-                        title=f"High Threat: {a['source']}",
-                        message=a["title"],
-                        priority="high",
-                        tags="warning",
-                        cooldown_key=f"news-{a['url_hash']}",
-                    )
+                try:
+                    await threat_engine.assess("news", a["title"], a.get("summary", ""))
+                except Exception as e:
+                    logger.error(f"[news] Threat assess error: {e}")
 
         return new_articles

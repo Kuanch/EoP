@@ -51,7 +51,13 @@
 
 <!-- Cyber Tab -->
 <div id="tab-cyber" class="tab-content">
-    <div id="cyber-stats" class="cyber-stats"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div id="cyber-stats" class="cyber-stats" style="margin-bottom:0;"></div>
+        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:var(--text-secondary); cursor:pointer; white-space:nowrap;">
+            <input type="checkbox" id="cyber-alerts-toggle" style="accent-color:var(--accent);">
+            Alerts
+        </label>
+    </div>
     <div id="cyber-events"></div>
 </div>
 
@@ -117,5 +123,87 @@
         </div>
     </div>
     <div id="threat-map"></div>
+</div>
+
+<!-- Threats Tab -->
+<div id="tab-threats" class="tab-content">
+    <!-- Stats bar -->
+    <div class="threat-stats-bar">
+        <div class="cyber-stat"><div class="value" id="t-stat-today">0</div><div class="label">Threats Today</div></div>
+        <div class="cyber-stat"><div class="value" id="t-stat-notified">0</div><div class="label">Notifications</div></div>
+        <div class="cyber-stat"><div class="value" id="t-stat-llm">0</div><div class="label">LLM Calls</div></div>
+    </div>
+
+    <!-- Feed + Config layout -->
+    <div class="threat-layout">
+        <!-- Feed -->
+        <div class="threat-feed-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 style="font-size:14px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px;">Threat Feed</h3>
+                <button id="t-refresh" class="filter-apply-btn" style="font-size:11px;">Refresh</button>
+            </div>
+            <div id="threat-feed-list" style="max-height:calc(100vh - 300px); overflow-y:auto;"></div>
+        </div>
+
+        <!-- Config panel -->
+        <div class="threat-config-panel">
+            <h3 style="font-size:14px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">Configuration</h3>
+
+            <!-- Thresholds -->
+            <div class="config-section">
+                <label class="config-label">LLM Threshold (rule score to trigger LLM)</label>
+                <input type="range" id="t-llm-threshold" min="1" max="15" step="1" class="config-slider">
+                <span id="t-llm-threshold-val" class="config-val"></span>
+            </div>
+            <div class="config-section">
+                <label class="config-label">Notify Threshold (final score to send alert)</label>
+                <input type="range" id="t-notify-threshold" min="1" max="10" step="1" class="config-slider">
+                <span id="t-notify-threshold-val" class="config-val"></span>
+            </div>
+            <div class="config-section">
+                <label class="config-label">Cooldown (minutes)</label>
+                <input type="number" id="t-cooldown" min="1" max="120" class="config-input" style="width:80px;">
+            </div>
+
+            <!-- LLM toggle -->
+            <div class="config-section">
+                <label class="config-label" style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="t-llm-enabled" style="accent-color:var(--accent);">
+                    LLM Enabled (Claude Haiku)
+                </label>
+            </div>
+
+            <!-- Sources -->
+            <div class="config-section">
+                <label class="config-label">Sources</label>
+                <div style="display:flex; gap:12px; margin-top:4px;">
+                    <label style="font-size:12px; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="t-src-news" style="accent-color:var(--accent);"> News</label>
+                    <label style="font-size:12px; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="t-src-cyber" style="accent-color:var(--accent);"> Cyber</label>
+                    <label style="font-size:12px; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="t-src-pizzint" style="accent-color:var(--accent);"> PizzINT</label>
+                </div>
+            </div>
+
+            <!-- LLM Prompt -->
+            <div class="config-section">
+                <label class="config-label">LLM Prompt</label>
+                <textarea id="t-llm-prompt" class="config-textarea" rows="6"></textarea>
+            </div>
+
+            <!-- Keyword Rules -->
+            <div class="config-section">
+                <label class="config-label">Keyword Rules</label>
+                <div id="t-keyword-rules" class="keyword-rules-list"></div>
+                <div style="display:flex; gap:6px; margin-top:8px;">
+                    <input type="text" id="t-new-keyword" placeholder="keyword" class="config-input" style="flex:1;">
+                    <input type="number" id="t-new-weight" placeholder="wt" class="config-input" style="width:50px;" min="1" max="10">
+                    <button id="t-add-keyword" class="filter-apply-btn" style="font-size:11px;">Add</button>
+                </div>
+            </div>
+
+            <!-- Save -->
+            <button id="t-save-config" class="filter-apply-btn" style="width:100%; padding:8px; margin-top:12px; font-size:13px;">Save Configuration</button>
+            <div id="t-save-status" style="font-size:11px; color:var(--green); margin-top:6px; text-align:center;"></div>
+        </div>
+    </div>
 </div>
 {% endblock %}
