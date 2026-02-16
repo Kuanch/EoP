@@ -28,7 +28,6 @@ NEWS_FEEDS = {
 # Forex pairs (primary monitors)
 FOREX_SYMBOLS = {
     "EUR/USD": "C:EURUSD",
-    "GBP/USD": "C:GBPUSD",
     "USD/JPY": "C:USDJPY",
 }
 
@@ -36,7 +35,6 @@ FOREX_SYMBOLS = {
 MARKET_SYMBOLS = {
     "S&P 500": "SPY",
     "NASDAQ": "QQQ",
-    "Dow Jones": "DIA",
 }
 
 CRYPTO_IDS = ["bitcoin", "ethereum"]

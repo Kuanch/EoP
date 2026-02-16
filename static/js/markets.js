@@ -8,9 +8,8 @@ const Markets = {
     // Expected instruments: [name, category, size]
     expected: [
         ['EUR/USD', 'forex', 'primary'], ['Bitcoin', 'crypto', 'primary'],
-        ['GBP/USD', 'forex', 'secondary'], ['USD/JPY', 'forex', 'secondary'],
-        ['Ethereum', 'crypto', 'secondary'],
-        ['S&P 500', 'stocks', 'secondary'], ['NASDAQ', 'stocks', 'secondary'], ['Dow Jones', 'stocks', 'secondary'],
+        ['USD/JPY', 'forex', 'secondary'], ['Ethereum', 'crypto', 'secondary'],
+        ['S&P 500', 'stocks', 'secondary'], ['NASDAQ', 'stocks', 'secondary'],
     ],
 
     init() {
