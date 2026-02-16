@@ -4,10 +4,21 @@ const News = {
     articles: [],
     activeSource: 'All',
 
+    _filteredForClick: [],
+
     init() {
         WS.on('news', (data) => this.onData(data));
         this.setupFilters();
         this.loadInitial();
+        // Event delegation for news card clicks
+        const feed = document.getElementById('news-feed');
+        if (feed) feed.addEventListener('click', (e) => {
+            const card = e.target.closest('[data-news-idx]');
+            if (!card) return;
+            const idx = parseInt(card.dataset.newsIdx, 10);
+            const a = this._filteredForClick[idx];
+            if (a && a.url) window.open(a.url, '_blank', 'noopener');
+        });
     },
 
     async loadInitial() {
@@ -56,9 +67,9 @@ const News = {
             return tb - ta;
         });
 
-        feed.innerHTML = filtered.map(a => {
+        feed.innerHTML = filtered.map((a, i) => {
             const threatClass = a.threat_score >= 15 ? 'high-threat' : a.threat_score >= 8 ? 'medium-threat' : '';
-            return `<div class="card news-card ${threatClass}" onclick="window.open('${this.escapeHtml(a.url)}','_blank')">
+            return `<div class="card news-card ${threatClass}" data-news-idx="${i}">
                 <span class="source-badge">${this.escapeHtml(a.source)}</span>
                 ${a.geo_region ? `<span class="source-badge">${this.escapeHtml(a.geo_region)}</span>` : ''}
                 <div class="title">${this.escapeHtml(a.title)}</div>
@@ -69,6 +80,8 @@ const News = {
                 </div>
             </div>`;
         }).join('');
+        // Event delegation for news card clicks (avoids inline onclick XSS)
+        this._filteredForClick = filtered;
     },
 
     escapeHtml(str) {

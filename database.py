@@ -60,6 +60,15 @@ class Article(Base):
     collected_at = Column(DateTime, default=datetime.utcnow)
 
 
+class SessionToken(Base):
+    """Persistent session tokens."""
+    __tablename__ = "session_tokens"
+
+    token = Column(String(64), primary_key=True)
+    username = Column(String(50), nullable=False, index=True)
+    created_at = Column(Float, nullable=False)
+
+
 class ThreatEvent(Base):
     """Cyber threat event model."""
     __tablename__ = "threat_events"

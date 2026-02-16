@@ -69,9 +69,8 @@ if not SECRET_KEY:
         logger.warning("Could not save SECRET_KEY to .env — CSRF tokens will reset on restart")
 csrf_serializer = URLSafeTimedSerializer(SECRET_KEY)
 
-# Session storage with expiration
+# Session storage — DB-backed, survives restarts
 SESSION_MAX_AGE = 86400  # 24 hours
-sessions: dict[str, dict] = {}  # token -> {"username": str, "created": float}
 
 # Login attempt tracking
 login_attempts = {}
@@ -119,29 +118,58 @@ def record_login_attempt(ip: str):
 
 
 def create_session(username: str) -> str:
+    from database import SessionToken
     session_token = secrets.token_urlsafe(32)
-    sessions[session_token] = {"username": username, "created": time.time()}
+    db = SessionLocal()
+    try:
+        db.add(SessionToken(token=session_token, username=username, created_at=time.time()))
+        db.commit()
+    finally:
+        db.close()
     return session_token
 
 
 def get_current_user(request: Request) -> Optional[str]:
+    from database import SessionToken
     session_token = request.cookies.get("session_token")
-    if session_token and session_token in sessions:
-        session = sessions[session_token]
-        # Check expiration
-        if time.time() - session["created"] > SESSION_MAX_AGE:
-            del sessions[session_token]
+    if not session_token:
+        return None
+    db = SessionLocal()
+    try:
+        s = db.query(SessionToken).filter(SessionToken.token == session_token).first()
+        if not s:
             return None
-        return session["username"]
-    return None
+        if time.time() - s.created_at > SESSION_MAX_AGE:
+            db.delete(s)
+            db.commit()
+            return None
+        return s.username
+    finally:
+        db.close()
+
+
+def _delete_session(token: str):
+    from database import SessionToken
+    db = SessionLocal()
+    try:
+        s = db.query(SessionToken).filter(SessionToken.token == token).first()
+        if s:
+            db.delete(s)
+            db.commit()
+    finally:
+        db.close()
 
 
 def _cleanup_expired_sessions():
-    """Remove expired sessions to prevent memory leak."""
-    now = time.time()
-    expired = [t for t, s in sessions.items() if now - s["created"] > SESSION_MAX_AGE]
-    for t in expired:
-        del sessions[t]
+    """Remove expired sessions."""
+    from database import SessionToken
+    db = SessionLocal()
+    try:
+        cutoff = time.time() - SESSION_MAX_AGE
+        db.query(SessionToken).filter(SessionToken.created_at < cutoff).delete()
+        db.commit()
+    finally:
+        db.close()
 
 
 # --- Routes ---
@@ -221,11 +249,11 @@ async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request, "username": user})
 
 
-@app.get("/logout")
+@app.post("/logout")
 async def logout(request: Request):
     session_token = request.cookies.get("session_token")
-    if session_token and session_token in sessions:
-        del sessions[session_token]
+    if session_token:
+        _delete_session(session_token)
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie("session_token")
     return response
@@ -235,17 +263,20 @@ async def logout(request: Request):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    # Check session auth from cookie
+    # Check session auth from cookie (DB-backed)
+    from database import SessionToken
     session_token = websocket.cookies.get("session_token")
-    if not session_token or session_token not in sessions:
+    if not session_token:
         await websocket.close(code=4001)
         return
-    # Verify session not expired
-    session = sessions[session_token]
-    if time.time() - session["created"] > SESSION_MAX_AGE:
-        del sessions[session_token]
-        await websocket.close(code=4001)
-        return
+    db = SessionLocal()
+    try:
+        s = db.query(SessionToken).filter(SessionToken.token == session_token).first()
+        if not s or time.time() - s.created_at > SESSION_MAX_AGE:
+            await websocket.close(code=4001)
+            return
+    finally:
+        db.close()
 
     await manager.connect(websocket)
     try:
@@ -383,6 +414,34 @@ async def api_threats_config_post(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     from threat_engine import save_config
     body = await request.json()
+
+    # Validate config schema
+    ALLOWED_KEYS = {"keyword_rules", "llm_threshold", "notify_threshold", "llm_enabled", "llm_prompt", "cooldown_minutes", "sources"}
+    if not isinstance(body, dict) or not set(body.keys()).issubset(ALLOWED_KEYS):
+        return JSONResponse({"error": "Invalid config keys"}, status_code=400)
+    if "keyword_rules" in body:
+        if not isinstance(body["keyword_rules"], dict):
+            return JSONResponse({"error": "keyword_rules must be a dict"}, status_code=400)
+        for k, v in body["keyword_rules"].items():
+            if not isinstance(k, str) or not isinstance(v, (int, float)) or not (0 <= v <= 10):
+                return JSONResponse({"error": f"Invalid keyword rule: {k}"}, status_code=400)
+    if "llm_threshold" in body and not (isinstance(body["llm_threshold"], (int, float)) and 1 <= body["llm_threshold"] <= 15):
+        return JSONResponse({"error": "llm_threshold must be 1-15"}, status_code=400)
+    if "notify_threshold" in body and not (isinstance(body["notify_threshold"], (int, float)) and 1 <= body["notify_threshold"] <= 10):
+        return JSONResponse({"error": "notify_threshold must be 1-10"}, status_code=400)
+    if "cooldown_minutes" in body and not (isinstance(body["cooldown_minutes"], (int, float)) and 1 <= body["cooldown_minutes"] <= 120):
+        return JSONResponse({"error": "cooldown_minutes must be 1-120"}, status_code=400)
+    if "llm_enabled" in body and not isinstance(body["llm_enabled"], bool):
+        return JSONResponse({"error": "llm_enabled must be boolean"}, status_code=400)
+    if "llm_prompt" in body and (not isinstance(body["llm_prompt"], str) or len(body["llm_prompt"]) > 2000):
+        return JSONResponse({"error": "llm_prompt must be string under 2000 chars"}, status_code=400)
+    if "sources" in body:
+        if not isinstance(body["sources"], dict):
+            return JSONResponse({"error": "sources must be a dict"}, status_code=400)
+        for k, v in body["sources"].items():
+            if not isinstance(v, bool):
+                return JSONResponse({"error": f"sources.{k} must be boolean"}, status_code=400)
+
     save_config(body)
     return JSONResponse({"status": "ok"})
 
