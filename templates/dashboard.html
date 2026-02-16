@@ -51,7 +51,13 @@
 
 <!-- Cyber Tab -->
 <div id="tab-cyber" class="tab-content">
-    <div id="cyber-stats" class="cyber-stats"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div id="cyber-stats" class="cyber-stats" style="margin-bottom:0;"></div>
+        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:var(--text-secondary); cursor:pointer; white-space:nowrap;">
+            <input type="checkbox" id="cyber-alerts-toggle" style="accent-color:var(--accent);">
+            Alerts
+        </label>
+    </div>
     <div id="cyber-events"></div>
 </div>
 
