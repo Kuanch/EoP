@@ -70,7 +70,7 @@ if not SECRET_KEY:
 csrf_serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 # Session storage with expiration
-SESSION_MAX_AGE = 3600  # 1 hour
+SESSION_MAX_AGE = 86400  # 24 hours
 sessions: dict[str, dict] = {}  # token -> {"username": str, "created": float}
 
 # Login attempt tracking
@@ -195,8 +195,8 @@ async def login(
         response.set_cookie(
             key="session_token", value=session_token,
             httponly=True, secure=IS_PRODUCTION,
-            samesite="strict" if IS_PRODUCTION else "lax",
-            max_age=3600
+            samesite="lax",
+            max_age=86400
         )
         return response
     else:
