@@ -49,6 +49,7 @@ class PizzIntCollector(BaseCollector):
             data = self._extract_from_html(html)
 
         if data:
+            old_level = pizzint_cache.get("optempo_level")
             pizzint_cache.update(data)
             pizzint_cache["timestamp"] = datetime.utcnow().isoformat()
             await manager.broadcast("pizzint", pizzint_cache)
@@ -57,6 +58,18 @@ class PizzIntCollector(BaseCollector):
                 pizzint_cache.get("optempo_level"),
                 pizzint_cache.get("optempo_label"),
             )
+
+            # Notify on OPTEMPO level change
+            new_level = pizzint_cache.get("optempo_level")
+            if old_level is not None and new_level is not None and new_level != old_level:
+                import notifier
+                await notifier.send(
+                    title=f"PizzINT: OPTEMPO Level {new_level}",
+                    message=f"{pizzint_cache.get('optempo_label', '')} (was {old_level})",
+                    priority="high" if new_level > old_level else "default",
+                    tags="pizza,warning",
+                    cooldown_key=f"pizzint-level-{new_level}",
+                )
 
     def _extract_next_data(self, html: str) -> dict | None:
         """Extract data from React Server Components payload (double-escaped JSON in __next_f.push)."""
