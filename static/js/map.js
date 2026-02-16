@@ -196,22 +196,56 @@ const MapView = {
         return '#e94560';
     },
 
-    // --- Ships (Canvas-rendered CircleMarkers) ---
+    // --- Ships ---
+
+    _shipIcon(s) {
+        const color = this._countryColor(s.country);
+        const rot = s.cog != null ? Math.round(s.cog) : 0;
+        const vtype = s.vessel_type || 0;
+        const vname = (s.vessel_type_name || '').toLowerCase();
+        const isSpecial = vtype === 35 || vname === 'military' ||
+                          vtype === 55 || vname === 'law enforcement' ||
+                          vtype === 51 || vname === 'sar';
+        const isUnknown = !s.country || s.country === 'Unknown';
+
+        let shape;
+        if (isSpecial) {
+            // Diamond for military / law enforcement / SAR
+            shape = `<polygon points="10,2 18,10 10,18 2,10" fill="${color}" stroke="#fff" stroke-width="1" opacity="0.9"/>`;
+        } else if (isUnknown) {
+            // X for unknown nationality
+            shape = `<line x1="4" y1="4" x2="16" y2="16" stroke="${color}" stroke-width="2.5" opacity="0.9"/>` +
+                    `<line x1="16" y1="4" x2="4" y2="16" stroke="${color}" stroke-width="2.5" opacity="0.9"/>`;
+        } else {
+            // Circle for normal vessels
+            return null; // Use circleMarker for performance
+        }
+
+        const svg = `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${rot}deg)">${shape}</svg>`;
+        return L.divIcon({ html: svg, iconSize: [20, 20], iconAnchor: [10, 10], className: '' });
+    },
 
     _renderShips(ships) {
         this.shipsLayer.clearLayers();
         ships.forEach(s => {
             if (s.lat == null || s.lon == null) return;
-            const color = this._vesselColor(s.vessel_type);
-            const radius = this._vesselRadius(s.vessel_type);
-            const marker = L.circleMarker([s.lat, s.lon], {
-                renderer: this.shipsRenderer,
-                radius: radius,
-                fillColor: color,
-                color: '#000',
-                weight: 0.5,
-                fillOpacity: 0.8,
-            });
+            const color = this._countryColor(s.country);
+            const icon = this._shipIcon(s);
+            let marker;
+            if (icon) {
+                // SVG marker for special/unknown ships
+                marker = L.marker([s.lat, s.lon], { icon });
+            } else {
+                // Canvas circleMarker for normal ships (fast)
+                marker = L.circleMarker([s.lat, s.lon], {
+                    renderer: this.shipsRenderer,
+                    radius: 3,
+                    fillColor: color,
+                    color: '#000',
+                    weight: 0.5,
+                    fillOpacity: 0.8,
+                });
+            }
             const speedStr = s.sog != null ? s.sog + ' kn' : 'N/A';
             const headingStr = s.heading != null ? Math.round(s.heading) + '°' : 'N/A';
             marker.bindTooltip(
@@ -226,24 +260,6 @@ const MapView = {
             this.shipsLayer.addLayer(marker);
         });
         this._updateCount('ships', ships.length);
-    },
-
-    _vesselColor(vtype) {
-        if (vtype >= 70 && vtype <= 79) return '#4488ff';   // Cargo — blue
-        if (vtype >= 80 && vtype <= 89) return '#ff4444';   // Tanker — red
-        if (vtype === 30) return '#44cc66';                  // Fishing — green
-        if (vtype === 35) return '#888888';                  // Military — gray
-        if (vtype >= 60 && vtype <= 69) return '#aa44ff';   // Passenger — purple
-        if (vtype === 36 || vtype === 37) return '#44dddd'; // Sailing/yacht — cyan
-        return '#ff8833';                                    // Other — orange
-    },
-
-    _vesselRadius(vtype) {
-        if (vtype === 35) return 5;                          // Military
-        if (vtype >= 80 && vtype <= 89) return 4;           // Tanker
-        if (vtype >= 70 && vtype <= 79) return 4;           // Cargo
-        if (vtype >= 60 && vtype <= 69) return 4;           // Passenger
-        return 3;
     },
 
     // --- Shared ---
