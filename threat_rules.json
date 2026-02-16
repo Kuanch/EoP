@@ -35,7 +35,7 @@
   "cooldown_minutes": 15,
   "sources": {
     "news": true,
-    "cyber": true,
+    "cyber": false,
     "pizzint": true
   }
 }

@@ -97,8 +97,10 @@ async def call_llm(text: str, prompt: str) -> dict | None:
                 return None
 
             data = resp.json()
-            content = data["content"][0]["text"]
-            # Parse JSON from response
+            content = data["content"][0]["text"].strip()
+            # Strip markdown fences if present
+            if content.startswith("```"):
+                content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
             result = json.loads(content)
             stats["llm_calls"] += 1
             return result
