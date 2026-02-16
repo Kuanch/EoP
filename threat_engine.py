@@ -170,29 +170,15 @@ async def assess(source: str, title: str, text: str, extra: dict | None = None) 
             _cooldowns[cooldown_key] = now
             import notifier
             priority = "urgent" if assessment["final_score"] >= 9 else "high"
-
-            # Build message with scoring info
             used_llm = assessment["llm_score"] is not None
-            score_info = f"Rule: {assessment['rule_score']}/10"
-            if used_llm:
-                score_info += f" → LLM: {assessment['llm_score']}/10"
-                if assessment.get("llm_threat_type"):
-                    score_info += f" ({assessment['llm_threat_type']})"
+            tag = "[LLM]" if used_llm else "[Rule]"
             rationale = assessment.get("llm_rationale") or ""
-            msg = f"{title}\n\n{score_info}"
-            if rationale:
-                msg += f"\n{rationale}"
-
-            # Tags: add robot emoji for LLM-assessed items
-            tags = "warning,rotating_light"
-            if used_llm:
-                tags += ",robot"
-
+            msg = f"{title}\n{rationale}" if rationale else title
             await notifier.send(
-                title=f"{'[LLM] ' if used_llm else ''}Threat [{source}]: {assessment['final_score']}/10",
+                title=f"{tag} Threat [{source}]: {assessment['final_score']}/10",
                 message=msg,
                 priority=priority,
-                tags=tags,
+                tags="warning,rotating_light",
                 cooldown_key="",  # Already handled above
             )
             assessment["notified"] = True
