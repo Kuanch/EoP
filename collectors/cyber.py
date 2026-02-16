@@ -154,15 +154,13 @@ class CyberCollector(BaseCollector):
         await manager.broadcast("cyber", {"events": events, "stats": stats_cache})
         logger.info(f"[cyber] {len(events)} events, {total_iocs} IOCs")
 
-        # Notify on Critical/High threats
-        import notifier
+        # Threat engine assessment
+        import threat_engine
         for e in events:
             if e.get("severity") in ("Critical", "High"):
-                await notifier.send(
-                    title=f"Cyber {e['severity']}: {e['source']}",
-                    message=e["title"],
-                    priority="high" if e["severity"] == "Critical" else "default",
-                    tags="skull" if e["severity"] == "Critical" else "warning",
-                    cooldown_key=f"cyber-{e['title'][:50]}",
-                )
+                try:
+                    await threat_engine.assess("cyber", e["title"], e.get("description", ""),
+                                               extra={"severity": e["severity"]})
+                except Exception as ex:
+                    logger.error(f"[cyber] Threat assess error: {ex}")
         return events

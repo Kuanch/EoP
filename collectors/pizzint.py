@@ -59,17 +59,18 @@ class PizzIntCollector(BaseCollector):
                 pizzint_cache.get("optempo_label"),
             )
 
-            # Notify on OPTEMPO level change
+            # Threat engine assessment on level change
             new_level = pizzint_cache.get("optempo_level")
             if old_level is not None and new_level is not None and new_level != old_level:
-                import notifier
-                await notifier.send(
-                    title=f"PizzINT: OPTEMPO Level {new_level}",
-                    message=f"{pizzint_cache.get('optempo_label', '')} (was {old_level})",
-                    priority="high" if new_level > old_level else "default",
-                    tags="pizza,warning",
-                    cooldown_key=f"pizzint-level-{new_level}",
-                )
+                import threat_engine
+                try:
+                    await threat_engine.assess(
+                        "pizzint",
+                        f"OPTEMPO Level {new_level} ({pizzint_cache.get('optempo_label', '')})",
+                        f"Changed from level {old_level}. {pizzint_cache.get('assessment', '')}",
+                    )
+                except Exception as e:
+                    logger.error(f"[pizzint] Threat assess error: {e}")
 
     def _extract_next_data(self, html: str) -> dict | None:
         """Extract data from React Server Components payload (double-escaped JSON in __next_f.push)."""

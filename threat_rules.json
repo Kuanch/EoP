@@ -1,0 +1,41 @@
+{
+  "keyword_rules": {
+    "war": 10,
+    "invasion": 10,
+    "nuclear": 10,
+    "missile": 9,
+    "airstrike": 9,
+    "bombing": 9,
+    "attack": 8,
+    "troops": 8,
+    "military": 7,
+    "conflict": 7,
+    "casualties": 7,
+    "killed": 7,
+    "strike": 6,
+    "weapon": 6,
+    "drone": 6,
+    "sanctions": 5,
+    "threat": 5,
+    "escalation": 5,
+    "tension": 4,
+    "deployment": 4,
+    "exercise": 4,
+    "protest": 3,
+    "crisis": 3,
+    "warning": 3,
+    "negotiation": 2,
+    "diplomacy": 2,
+    "ceasefire": 2
+  },
+  "llm_threshold": 5,
+  "notify_threshold": 7,
+  "llm_enabled": true,
+  "llm_prompt": "You are a geopolitical and cybersecurity threat analyst. Given the following item, assess the real-world threat level.\n\nRespond with ONLY valid JSON:\n{\"severity\": <1-10>, \"threat_type\": \"<military|cyber|political|economic|social>\", \"rationale\": \"<one sentence>\"}",
+  "cooldown_minutes": 15,
+  "sources": {
+    "news": true,
+    "cyber": true,
+    "pizzint": true
+  }
+}

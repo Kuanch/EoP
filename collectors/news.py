@@ -122,16 +122,12 @@ class NewsCollector(BaseCollector):
             await manager.broadcast("news", new_articles)
             logger.info(f"[news] Broadcast {len(new_articles)} new articles")
 
-            # Notify on high-threat articles
-            import notifier
+            # Threat engine assessment
+            import threat_engine
             for a in new_articles:
-                if a.get("threat_score", 0) > 5:
-                    await notifier.send(
-                        title=f"High Threat: {a['source']}",
-                        message=a["title"],
-                        priority="high",
-                        tags="warning",
-                        cooldown_key=f"news-{a['url_hash']}",
-                    )
+                try:
+                    await threat_engine.assess("news", a["title"], a.get("summary", ""))
+                except Exception as e:
+                    logger.error(f"[news] Threat assess error: {e}")
 
         return new_articles
