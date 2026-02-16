@@ -1,7 +1,9 @@
 """RSS news feed collector."""
 
+import calendar
 import hashlib
 import logging
+import time
 from datetime import datetime
 
 import feedparser
@@ -49,6 +51,13 @@ class NewsCollector(BaseCollector):
                         continue
                     feed = feedparser.parse(resp.text)
                     for entry in feed.entries[:20]:
+                        # Skip old articles (>6 hours)
+                        pub_parsed = entry.get("published_parsed")
+                        if pub_parsed:
+                            pub_ts = calendar.timegm(pub_parsed)
+                            if time.time() - pub_ts > 6 * 3600:
+                                continue
+
                         url_hash = hashlib.sha256(entry.get("link", "").encode()).hexdigest()[:16]
                         if url_hash in seen_hashes:
                             continue
