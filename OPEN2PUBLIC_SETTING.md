@@ -3,67 +3,75 @@
 ## Current Setup
 
 - **Domain**: kuanchlee.com
-- **Tunnel**: `fastapi-login` (UUID: `de67ab45-09e6-4b41-a565-18020df1e878`)
+- **Tunnel**: `eop-tunnel` (UUID: `de67ab45-09e6-4b41-a565-18020df1e878`)
 - **Config**: `/root/.cloudflared/config.yml`
 - **App**: FastAPI on `localhost:8000`
+- **ntfy**: Push notifications on `localhost:8090` (exposed at `ntfy.kuanchlee.com`)
 
-## How to Start
+## Services
 
-### 1. Start the app
+EoP runs as three systemd/Docker services:
 
-```bash
-cd /home/sixigma/EoP
-nohup venv/bin/python main.py &
-```
+| Service | Type | Command |
+|---------|------|---------|
+| `eop` | systemd | `systemctl start eop` |
+| `cloudflared` | systemd | `systemctl start cloudflared` |
+| `eop-ntfy` | Docker | `docker compose -f docker-compose.ntfy.yml up -d` |
 
-### 2. Start the Cloudflare tunnel
-
-```bash
-nohup cloudflared tunnel run fastapi-login > /tmp/cloudflared.log 2>&1 &
-```
-
-### 3. Verify
+### Start everything
 
 ```bash
-# Check app responds
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8000
-# Should return 302
-
-# Check tunnel has active connections
-cloudflared tunnel info fastapi-login
-# Should show 4 connections (hkg/tpe regions)
+sudo systemctl start eop cloudflared
+cd /home/sixigma/EoP && docker compose -f docker-compose.ntfy.yml up -d
 ```
 
-Site is live at **https://kuanchlee.com**
+### Stop everything
+
+```bash
+sudo systemctl stop eop cloudflared
+cd /home/sixigma/EoP && docker compose -f docker-compose.ntfy.yml down
+```
+
+### Check status
+
+```bash
+systemctl status eop cloudflared
+docker ps | grep ntfy
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8000  # Should return 302
+```
+
+## Watchdog
+
+A cron job runs every minute (`/home/sixigma/EoP/watchdog.sh`):
+- Checks systemd services: `eop`, `cloudflared`
+- Checks Docker container: `eop-ntfy`
+- Verifies HTTP response from EoP
+- Auto-restarts any failed service
+- Log: `/tmp/eop-watchdog.log`
 
 ## Troubleshooting
 
 ### Error 1033 (Argo Tunnel error)
 
-Tunnel process exists but has no active connections. Fix:
+Tunnel process has no active connections:
 
 ```bash
-pkill -f "cloudflared"
-sleep 2
-nohup cloudflared tunnel run fastapi-login > /tmp/cloudflared.log 2>&1 &
+sudo systemctl restart cloudflared
+journalctl -u cloudflared --since "5 min ago"
 ```
-
-Check logs: `tail -20 /tmp/cloudflared.log`
 
 ### 502 Bad Gateway
 
-App not running. Start it:
+App not running:
 
 ```bash
-cd /home/sixigma/EoP
-nohup venv/bin/python main.py &
+sudo systemctl restart eop
+journalctl -u eop --since "5 min ago"
 ```
 
-### Check tunnel logs
+### Session keeps dropping
 
-```bash
-tail -f /tmp/cloudflared.log
-```
+Cookie `samesite` must be `lax` (not `strict`) when behind Cloudflare proxy. This is already configured in `main.py`.
 
 ## Config Reference
 
@@ -74,16 +82,18 @@ tunnel: de67ab45-09e6-4b41-a565-18020df1e878
 credentials-file: /root/.cloudflared/de67ab45-09e6-4b41-a565-18020df1e878.json
 
 ingress:
+  # ntfy push notifications
+  - hostname: ntfy.kuanchlee.com
+    service: http://localhost:8090
+
+  # Route your domain to local application
   - hostname: KUANCHLEE.COM
     service: http://localhost:8000
+
+  # Catch-all rule (required)
   - service: http_status:404
 ```
 
-## Optional: Auto-start with systemd
+**Note**: The hostname `KUANCHLEE.COM` must match the DNS CNAME exactly. Do not change the case.
 
-```bash
-sudo cp /home/sixigma/EoP/cloudflared.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable cloudflared
-sudo systemctl start cloudflared
-```
+Site is live at **https://kuanchlee.com**

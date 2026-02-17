@@ -24,8 +24,8 @@
 - [x] F2.9: REST API endpoint — GET /api/news
 
 ## Phase 3: Markets Module
-- [x] F3.1: Forex data collector — Polygon.io API (EUR/USD, GBP/USD, USD/JPY)
-- [x] F3.2: Stock data collector — Polygon.io API (SPY, QQQ, DIA)
+- [x] F3.1: Forex data collector — Polygon.io API (EUR/USD, USD/JPY)
+- [x] F3.2: Stock data collector — Polygon.io API (SPY, QQQ)
 - [x] F3.3: Crypto data collector — CoinGecko API (BTC, ETH) with 1-day 5-min resolution chart
 - [x] F3.4: Market open/closed detection — forex (Sun-Fri), stocks (Mon-Fri 9:30-16:00 ET), crypto 24/7
 - [x] F3.5: WebSocket broadcast — {module: "markets", data: {forex, crypto, stocks, ...}}
@@ -72,10 +72,24 @@
 - [x] F6.8: Auto-refresh — real-time updates via WebSocket
 - [x] F6.9: REST API endpoint — GET /api/threats
 - [x] F6.10: AIS ship tracking — AISstream.io WebSocket for Taiwan Strait vessel positions
-- [x] F6.11: Ship layer — boat SVG icons colored by vessel type (cargo/tanker/fishing/military/passenger)
+- [x] F6.11: Ship layer — nationality-colored markers with special shapes (diamond: military/law enforcement/SAR, X: unknown)
 - [x] F6.12: Layer toggle buttons — independent Aircraft/Ships toggle with live counts
 - [x] F6.13: Ship tooltips — name, MMSI, type, speed, heading
 - [x] F6.14: REST API endpoint — GET /api/ships
+
+## Phase 7: Notifications, Threat Detection & Security
+- [x] F7.1: ntfy push notifications — self-hosted ntfy server with iOS APNS relay via ntfy.sh upstream
+- [x] F7.2: Hybrid threat detection — two-pass scoring: keyword rules → Claude Haiku LLM assessment
+- [x] F7.3: Threat config UI — dashboard Threats tab with adjustable thresholds, keyword weights, LLM toggle
+- [x] F7.4: Notification tags — `[LLM]`/`[Rule]` prefix in ntfy title indicating scoring method
+- [x] F7.5: LLM Chinese rationale — Claude Haiku returns threat rationale in Traditional Chinese
+- [x] F7.6: Notification cooldown — per-topic cooldown (default 15 min) to prevent alert fatigue
+- [x] F7.7: Security hardening — XSS fix (event delegation), CSRF (POST logout), config validation, persistent sessions
+- [x] F7.8: Security headers — HSTS, X-Frame-Options: DENY, X-Content-Type-Options, X-XSS-Protection
+- [x] F7.9: Systemd services — `eop.service` and `cloudflared.service` with auto-restart
+- [x] F7.10: Watchdog cron — minute-by-minute health check for all services with auto-recovery
+- [x] F7.11: Ship nationality colors — vessels colored by country (matching aircraft), special shapes for military/unknown
+- [x] F7.12: News age filter — configurable article age limit (default 24h)
 
 ## Future Features
 - [ ] ADS-B Exchange API — replace/supplement OpenSky with adsbexchange.com for richer aircraft data (military flags, aircraft type, registration)
