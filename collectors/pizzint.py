@@ -51,7 +51,7 @@ class PizzIntCollector(BaseCollector):
         if data:
             old_level = pizzint_cache.get("optempo_level")
             pizzint_cache.update(data)
-            pizzint_cache["timestamp"] = datetime.utcnow().isoformat()
+            pizzint_cache["timestamp"] = datetime.now().isoformat()
             await manager.broadcast("pizzint", pizzint_cache)
             logger.info(
                 "PizzINT: OPTEMPO Level %s (%s)",

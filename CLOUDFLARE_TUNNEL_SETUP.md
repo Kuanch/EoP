@@ -1,20 +1,25 @@
 # Cloudflare Tunnel Setup Guide
 
-This guide walks you through setting up Cloudflare Tunnel to expose your FastAPI application securely with HTTPS.
+## Current Configuration
 
-## Prerequisites
+- **Tunnel name**: `eop-tunnel`
+- **Tunnel UUID**: `de67ab45-09e6-4b41-a565-18020df1e878`
+- **Config**: `/root/.cloudflared/config.yml`
+- **Credentials**: `/root/.cloudflared/de67ab45-09e6-4b41-a565-18020df1e878.json`
 
-- ✅ Cloudflared installed (already done)
-- ✅ Cloudflare account (free tier works)
-- ⏳ A domain name (or use Cloudflare's free subdomain)
+### Hostnames
+
+| Hostname | Service | Purpose |
+|----------|---------|---------|
+| `KUANCHLEE.COM` | `http://localhost:8000` | EoP dashboard |
+| `ntfy.kuanchlee.com` | `http://localhost:8090` | ntfy push notifications |
 
 ## Why Cloudflare Tunnel?
 
-- **Free TLS certificate** - Auto-renewed, no configuration needed
-- **Bypasses CGNAT** - Works without public IP or port forwarding
-- **DDoS protection** - Cloudflare's network protects your application
-- **Zero-config** - No firewall rules or router configuration needed
-- **Access control** - Optional: Restrict who can access your app
+- **Free TLS certificate** — auto-renewed, no configuration needed
+- **Bypasses CGNAT** — works without public IP or port forwarding
+- **DDoS protection** — Cloudflare's network protects your application
+- **Zero-config** — no firewall rules or router configuration needed
 
 ---
 
@@ -26,74 +31,49 @@ This guide walks you through setting up Cloudflare Tunnel to expose your FastAPI
 cloudflared tunnel login
 ```
 
-This will:
-1. Open your browser
-2. Ask you to log in to Cloudflare
-3. Select the domain you want to use
-4. Download a certificate to `~/.cloudflared/cert.pem`
-
 ### Step 2: Create a Tunnel
 
 ```bash
-cloudflared tunnel create fastapi-login
+cloudflared tunnel create eop-tunnel
 ```
-
-This creates:
-- A tunnel with UUID (e.g., `a1b2c3d4-...`)
-- Credentials file at `~/.cloudflared/<UUID>.json`
-
-**Important**: Save the UUID - you'll need it for configuration!
 
 ### Step 3: Configure the Tunnel
 
-Create `/root/.cloudflared/config.yml`:
+`/root/.cloudflared/config.yml`:
 
 ```yaml
-tunnel: <YOUR-TUNNEL-UUID>
-credentials-file: /root/.cloudflared/<YOUR-TUNNEL-UUID>.json
+tunnel: de67ab45-09e6-4b41-a565-18020df1e878
+credentials-file: /root/.cloudflared/de67ab45-09e6-4b41-a565-18020df1e878.json
 
 ingress:
+  # ntfy push notifications
+  - hostname: ntfy.kuanchlee.com
+    service: http://localhost:8090
+
   # Route your domain to local application
-  - hostname: yourapp.yourdomain.com
+  - hostname: KUANCHLEE.COM
     service: http://localhost:8000
 
   # Catch-all rule (required)
   - service: http_status:404
 ```
 
-**Replace**:
-- `<YOUR-TUNNEL-UUID>` with your actual tunnel UUID
-- `yourapp.yourdomain.com` with your domain/subdomain
+**Important**: The hostname `KUANCHLEE.COM` must match the DNS CNAME record exactly. Do not change the case — this broke access when changed to lowercase.
 
 ### Step 4: Route DNS
 
-Tell Cloudflare to route your domain to the tunnel:
-
 ```bash
-cloudflared tunnel route dns fastapi-login yourapp.yourdomain.com
+cloudflared tunnel route dns eop-tunnel KUANCHLEE.COM
+cloudflared tunnel route dns eop-tunnel ntfy.kuanchlee.com
 ```
 
-This automatically creates a CNAME record in your Cloudflare DNS.
-
-### Step 5: Start the Tunnel
-
-```bash
-cloudflared tunnel run fastapi-login
-```
-
-Your app is now live at: **https://yourapp.yourdomain.com** 🎉
+This creates CNAME records in Cloudflare DNS pointing to the tunnel.
 
 ---
 
 ## Production Setup: Systemd Service
 
-To keep the tunnel running permanently:
-
-### Create systemd service file:
-
-```bash
-sudo nano /etc/systemd/system/cloudflared.service
-```
+The tunnel runs as a systemd service at `/etc/systemd/system/cloudflared.service`:
 
 ```ini
 [Unit]
@@ -103,7 +83,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/cloudflared tunnel run fastapi-login
+ExecStart=/usr/local/bin/cloudflared tunnel run eop-tunnel
 Restart=always
 RestartSec=5
 
@@ -111,226 +91,86 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-### Enable and start the service:
+### Manage the service
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable cloudflared
 sudo systemctl start cloudflared
-sudo systemctl status cloudflared
-```
-
-### Manage the service:
-
-```bash
-# Check status
-sudo systemctl status cloudflared
-
-# View logs
-sudo journalctl -u cloudflared -f
-
-# Restart
-sudo systemctl restart cloudflared
-
-# Stop
 sudo systemctl stop cloudflared
+sudo systemctl restart cloudflared
+sudo systemctl status cloudflared
+journalctl -u cloudflared -f
 ```
 
 ---
 
-## Quick Start (Development Mode)
+## Application HTTPS Settings
 
-For testing, you can use Quick Tunnel (no account needed):
+### Cookie Security
 
-```bash
-cloudflared tunnel --url http://localhost:8000
-```
-
-This gives you a temporary URL like: `https://random-subdomain.trycloudflare.com`
-
-**Note**: This URL changes every time and is for testing only!
-
----
-
-## Application Updates for HTTPS
-
-### 1. Update Cookie Security
-
-In `main.py`, update cookie settings to use `secure=True`:
+Behind Cloudflare proxy, cookies must use `samesite="lax"` (not `strict`), otherwise sessions drop after ~2 minutes:
 
 ```python
 response.set_cookie(
     key="session_token",
     value=session_token,
     httponly=True,
-    secure=True,        # ← Now safe with HTTPS!
-    samesite="strict",  # ← Stronger CSRF protection
-    max_age=3600
+    secure=True,
+    samesite="lax",
+    max_age=86400
 )
 ```
 
-### 2. Add Security Headers
+### Real Client IP
 
-Add HSTS (HTTP Strict Transport Security) header:
+Cloudflare sets `CF-Connecting-IP` header with the real client IP. The app uses this for rate limiting.
 
-```python
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+### Security Headers
 
-    # Force HTTPS for future requests
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-
-    return response
-```
-
-### 3. Trust Cloudflare's IP Forwarding
-
-When behind Cloudflare, get real client IP:
-
-```python
-def get_client_ip(request: Request) -> str:
-    """Get real client IP (works behind Cloudflare)"""
-    # Cloudflare sets CF-Connecting-IP header
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        return cf_ip
-
-    # Fallback to X-Forwarded-For
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-
-    # Fallback to direct connection
-    return request.client.host if request.client else "unknown"
-```
+All responses include HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, and other security headers.
 
 ---
 
 ## Troubleshooting
 
-### Issue: "tunnel login" doesn't open browser
+### Error 1033 (Argo Tunnel error)
 
-**Solution**: Manually visit the URL shown in terminal and paste the code.
-
-### Issue: DNS not resolving
-
-**Solution**: Wait 1-2 minutes for DNS propagation, or check:
-```bash
-cloudflared tunnel route ip show fastapi-login
-```
-
-### Issue: 502 Bad Gateway
-
-**Possible causes**:
-1. FastAPI app not running (`python main.py`)
-2. Wrong port in config.yml (should match your app)
-3. Firewall blocking localhost connections
-
-**Check**:
-```bash
-# Test local app
-curl http://localhost:8000
-
-# Check tunnel status
-cloudflared tunnel info fastapi-login
-```
-
-### Issue: Connection refused
-
-**Solution**: Make sure your app listens on `0.0.0.0` not `127.0.0.1`:
-```python
-uvicorn.run(app, host="0.0.0.0", port=8000)  # ✅ Good
-uvicorn.run(app, host="127.0.0.1", port=8000)  # ❌ Won't work with tunnel
-```
-
----
-
-## Security Considerations
-
-### ✅ What Cloudflare Tunnel Provides:
-
-- TLS/HTTPS encryption (protects data in transit)
-- DDoS protection
-- Web Application Firewall (WAF) - optional
-- Rate limiting - optional
-- Access control - optional (Cloudflare Access)
-
-### ⚠️ What You Still Need:
-
-Your application security features are still critical:
-- ✅ Password hashing
-- ✅ CSRF protection
-- ✅ Rate limiting (application level)
-- ⏳ Other security features (session management, etc.)
-
-**Cloudflare Tunnel handles transport security**, but application security is your responsibility!
-
----
-
-## Alternative: Quick Testing Without Domain
-
-For development/testing without a domain:
+Tunnel process has no active connections:
 
 ```bash
-# Terminal 1: Start your app
-python main.py
-
-# Terminal 2: Start tunnel (generates temporary URL)
-cloudflared tunnel --url http://localhost:8000
+sudo systemctl restart cloudflared
+journalctl -u cloudflared --since "5 min ago"
 ```
 
-Look for output like:
+### 502 Bad Gateway
+
+App not running:
+
+```bash
+sudo systemctl restart eop
 ```
-Your quick Tunnel has been created! Visit it at:
-https://random-words-1234.trycloudflare.com
+
+### DNS not resolving
+
+Wait 1-2 minutes for propagation, or check:
+
+```bash
+cloudflared tunnel info eop-tunnel
 ```
-
----
-
-## Cost
-
-**Free Tier Includes**:
-- Unlimited tunnels
-- Unlimited bandwidth
-- Basic DDoS protection
-- SSL certificates
-
-**No credit card required!**
 
 ---
 
 ## Useful Commands
 
 ```bash
-# List all tunnels
 cloudflared tunnel list
-
-# Show tunnel info
-cloudflared tunnel info fastapi-login
-
-# Delete a tunnel
-cloudflared tunnel delete fastapi-login
-
-# View tunnel logs
-cloudflared tunnel run fastapi-login --loglevel debug
-
-# Test connectivity
-cloudflared tunnel run --url http://localhost:8000
+cloudflared tunnel info eop-tunnel
+journalctl -u cloudflared --since "10 min ago"
 ```
 
 ---
 
-## Next Steps
+## Cost
 
-After setup:
-1. Test your HTTPS connection
-2. Update application to use `secure=True` for cookies
-3. Add HSTS header
-4. Set up systemd service for auto-start
-5. Configure Cloudflare WAF rules (optional)
-6. Set up Cloudflare Access for authentication (optional)
-
----
-
-*For more information, visit: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/*
+- **Cloudflare Tunnel**: Free (unlimited tunnels and bandwidth)
+- **SSL certificates**: Free (auto-renewed)
+- **DDoS protection**: Free (basic tier)

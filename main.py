@@ -442,8 +442,12 @@ async def api_threats_config_post(request: Request):
             if not isinstance(v, bool):
                 return JSONResponse({"error": f"sources.{k} must be boolean"}, status_code=400)
 
-    save_config(body)
-    return JSONResponse({"status": "ok"})
+    try:
+        save_config(body)
+        return JSONResponse({"status": "ok"})
+    except Exception as e:
+        logger.error(f"[API] Failed to save threat config: {e}")
+        return JSONResponse({"error": f"Failed to save config: {str(e)}"}, status_code=500)
 
 
 # --- Background tasks ---
