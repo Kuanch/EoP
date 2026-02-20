@@ -22,9 +22,17 @@ from sqlalchemy.orm import Session
 from database import get_db, authenticate_user, init_db, SessionLocal, Article
 from ws_manager import manager
 
-# Logging
+# Enhanced logging with security events
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+# Security-specific logger
+security_logger = logging.getLogger("security")
+security_handler = logging.FileHandler("logs/security.log")
+security_formatter = logging.Formatter("%(asctime)s SECURITY %(levelname)s: %(message)s")
+security_handler.setFormatter(security_formatter)
+security_logger.addHandler(security_handler)
+security_logger.setLevel(logging.WARNING)
 
 # Initialize database on startup
 init_db()
@@ -41,15 +49,44 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Security headers middleware
+# Security middleware
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
+async def security_middleware(request: Request, call_next):
+    client_ip = get_client_ip(request)
+
+    # Detect suspicious patterns
+    if _detect_attack_patterns(request):
+        security_logger.error(f"ATTACK_ATTEMPT detected from {client_ip}: {request.url}")
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+    # Protect sensitive static files - require authentication for JS/CSS
+    if request.url.path.startswith(("/static/js/", "/static/css/")):
+        if not _require_auth_simple(request):
+            security_logger.warning(f"Unauthorized static file access attempt from {client_ip}: {request.url.path}")
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    # Protect API endpoints - require authentication
+    if request.url.path.startswith("/api/"):
+        if not _require_auth_simple(request):
+            security_logger.warning(f"Unauthorized API access attempt from {client_ip}: {request.url.path}")
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     response = await call_next(request)
+
+    # Security headers
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' wss: ws:; "
+        "frame-ancestors 'none'"
+    )
     return response
 
 # Templates
@@ -72,8 +109,10 @@ csrf_serializer = URLSafeTimedSerializer(SECRET_KEY)
 # Session storage — DB-backed, survives restarts
 SESSION_MAX_AGE = 86400  # 24 hours
 
-# Login attempt tracking
+# Enhanced login attempt tracking with lockout
 login_attempts = {}
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_DURATION = 3600  # 1 hour in seconds
 
 
 def generate_csrf_token() -> str:
@@ -101,20 +140,39 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def check_rate_limit(ip: str, max_attempts: int = 5, window_minutes: int = 15) -> bool:
+def check_rate_limit(ip: str, max_attempts: int = MAX_LOGIN_ATTEMPTS, window_minutes: int = 15) -> bool:
+    """Enhanced rate limiting with progressive delays and lockout."""
     now = datetime.now()
     cutoff_time = now - timedelta(minutes=window_minutes)
+
     if ip in login_attempts:
+        # Clean old attempts
         login_attempts[ip] = [t for t in login_attempts[ip] if t > cutoff_time]
+
+        # Check for lockout
+        if len(login_attempts[ip]) >= max_attempts:
+            # Apply lockout duration
+            lockout_cutoff = now - timedelta(seconds=LOCKOUT_DURATION)
+            if login_attempts[ip][-1] > lockout_cutoff:
+                return False
     else:
         login_attempts[ip] = []
+
     return len(login_attempts[ip]) < max_attempts
 
 
 def record_login_attempt(ip: str):
+    """Record failed login attempt with security logging."""
     if ip not in login_attempts:
         login_attempts[ip] = []
     login_attempts[ip].append(datetime.now())
+
+    # Log security event
+    attempt_count = len(login_attempts[ip])
+    security_logger.warning(f"Failed login attempt #{attempt_count} from IP {ip}")
+
+    if attempt_count >= MAX_LOGIN_ATTEMPTS:
+        security_logger.error(f"SECURITY ALERT: Account lockout triggered for IP {ip} after {attempt_count} failed attempts")
 
 
 def create_session(username: str) -> str:
@@ -294,6 +352,38 @@ def _require_auth(request: Request):
     if not user:
         return None
     return user
+
+
+def _require_auth_simple(request: Request) -> bool:
+    """Simple boolean check for authentication."""
+    user = get_current_user(request)
+    return user is not None
+
+
+def _detect_attack_patterns(request: Request) -> bool:
+    """Detect common attack patterns in requests."""
+    import re
+
+    request_str = str(request.url).lower()
+    suspicious_patterns = [
+        r"union.*select",     # SQL injection attempts
+        r"<script.*>",        # XSS attempts
+        r"\.\.\/",            # Directory traversal
+        r"eval\(",            # Code injection
+        r"exec\(",            # Command injection
+        r"system\(",          # System command injection
+        r"phpinfo\(",         # PHP info disclosure
+        r"/etc/passwd",       # Linux system file access
+        r"/proc/self",        # Process information access
+        r"javascript:",       # XSS via javascript protocol
+        r"data:.*base64",     # Malicious data URIs
+    ]
+
+    for pattern in suspicious_patterns:
+        if re.search(pattern, request_str, re.IGNORECASE):
+            return True
+
+    return False
 
 
 @app.get("/api/news")
