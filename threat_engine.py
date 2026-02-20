@@ -44,8 +44,13 @@ def load_config() -> dict:
 
 def save_config(config: dict):
     """Save threat rules config to JSON file."""
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(config, f, indent=2)
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=2)
+        logger.info(f"[threat] Config saved successfully")
+    except Exception as e:
+        logger.error(f"[threat] Failed to save config: {e}")
+        raise
 
 
 def _reset_daily_stats():
