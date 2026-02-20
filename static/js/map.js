@@ -31,9 +31,13 @@ const MapView = {
 
         this.map = L.map('threat-map', { zoomControl: true, preferCanvas: true }).setView([25, 120], 4);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO',
-            maxZoom: 18,
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '&copy; Esri &copy; OpenStreetMap',
+            maxZoom: 16,
+            subdomains: 'abcd',
+            keepBuffer: 2,
+            updateWhenIdle: true,
+            updateInterval: 200,
         }).addTo(this.map);
 
         this.shipsRenderer = L.canvas({ padding: 0.5 });
@@ -56,7 +60,11 @@ const MapView = {
         this._setupIntegratedFilters();
 
         this.loadMilitary();
-        this.loadShips();
+
+        // Delay ship loading to ensure filters are properly initialized
+        setTimeout(() => {
+            this.loadShips();
+        }, 100);
     },
 
     // --- Layer toggles ---
@@ -447,15 +455,21 @@ const MapView = {
 
     async loadShips() {
         try {
-            // Fetch all ships, filter client-side for instant filtering
-            const resp = await fetch('/api/ships?filter=all');
+            // Load China ships only, then apply Law Enforcement filter
+            const resp = await fetch('/api/ships?filter=china&country=China');
             if (resp.ok) {
                 const d = await resp.json();
                 this._allShips = d;
+
+                // Apply default Law Enforcement filter immediately
                 this._filteredShips = this._filterShips(this._allShips, this.shipFilters);
                 this._renderShips(this._filteredShips);
+
+                console.log(`[Ships] Loaded ${d.length} China ships, showing ${this._filteredShips.length} Law Enforcement vessels`);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error('[Ships] Load error:', e);
+        }
     }
 };
 
