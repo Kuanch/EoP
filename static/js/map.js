@@ -29,7 +29,12 @@ const MapView = {
             return;
         }
 
-        this.map = L.map('threat-map', { zoomControl: true, preferCanvas: true }).setView([25, 120], 4);
+        this.map = L.map('threat-map', {
+            zoomControl: true,
+            preferCanvas: true,
+            maxBounds: [[-90, -180], [90, 180]], // Prevent panning outside world bounds
+            maxBoundsViscosity: 1.0 // Prevent panning outside bounds completely
+        }).setView([25, 120], 4);
 
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
             attribution: '&copy; Esri &copy; OpenStreetMap',
@@ -179,14 +184,17 @@ const MapView = {
             });
         }
 
-        // Close dropdowns when clicking outside, but not inside the panels
-        document.addEventListener('click', (e) => {
-            // Don't close if clicking on a button or inside a filter panel
-            if (e.target.closest('.map-layer-btn') || e.target.closest('.filter-dropdown')) {
-                return;
-            }
-            this._closeAllFilterPanels();
-        });
+        // Close dropdowns when clicking outside, but ONLY within the map tab area
+        const mapContainer = document.getElementById('tab-map');
+        if (mapContainer) {
+            mapContainer.addEventListener('click', (e) => {
+                // Don't close if clicking on a button or inside a filter panel
+                if (e.target.closest('.map-layer-btn') || e.target.closest('.filter-dropdown')) {
+                    return;
+                }
+                this._closeAllFilterPanels();
+            });
+        }
 
         // Prevent filter panels from closing when clicked inside
         document.getElementById('aircraft-filter-panel')?.addEventListener('click', (e) => {
