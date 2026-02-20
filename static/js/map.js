@@ -57,8 +57,6 @@ const MapView = {
 
         this.loadMilitary();
         this.loadShips();
-
-        console.log('[MapView] Map initialization complete');
     },
 
     // --- Layer toggles ---
@@ -432,33 +430,6 @@ const MapView = {
         if (el) el.textContent = count;
     },
 
-    // Debug helper - call from browser console: MapView.testFilters()
-    testFilters() {
-        console.log('=== TESTING SHIP FILTERS ===');
-        console.log('All ships:', this._allShips.length);
-
-        if (this._allShips.length > 0) {
-            console.log('Sample ship:', this._allShips[0]);
-
-            // Test empty filter (should show all)
-            const emptyFilter = { country: '', type: '', minSpeed: 0 };
-            const emptyResult = this._filterShips(this._allShips, emptyFilter);
-            console.log('Empty filter result:', emptyResult.length);
-
-            // Test country filter
-            const countryFilter = { country: 'China', type: '', minSpeed: 0 };
-            const countryResult = this._filterShips(this._allShips, countryFilter);
-            console.log('China filter result:', countryResult.length);
-
-            // Test speed filter
-            const speedFilter = { country: '', type: '', minSpeed: 1 };
-            const speedResult = this._filterShips(this._allShips, speedFilter);
-            console.log('Moving filter result:', speedResult.length);
-        }
-
-        console.log('Current ship filters:', this.shipFilters);
-        console.log('Current filtered ships:', this._filteredShips.length);
-    },
 
     _esc(s) {
         if (!s) return '';
