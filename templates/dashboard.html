@@ -63,62 +63,112 @@
 <!-- Map Tab -->
 <div id="tab-map" class="tab-content">
     <div class="map-controls">
-        <button class="map-layer-btn active" data-layer="aircraft">Aircraft <span id="map-count-aircraft" class="map-count">0</span></button>
-        <button class="map-layer-btn active" data-layer="ships">Ships <span id="map-count-ships" class="map-count">0</span></button>
-        <button id="ship-filter-toggle" class="map-layer-btn" style="font-size:11px;">Filters ▼</button>
-    </div>
-    <div id="ship-filter-panel" class="ship-filter-panel" style="display:none;">
-        <div class="filter-row">
-            <label>Flag</label>
-            <select id="sf-country" class="filter-select">
-                <option value="">All Countries</option>
-                <option value="China" selected>China</option>
-                <option value="Taiwan">Taiwan</option>
-                <option value="United States">United States</option>
-                <option value="Japan">Japan</option>
-                <option value="South Korea">South Korea</option>
-                <option value="North Korea">North Korea</option>
-                <option value="Russia">Russia</option>
-                <option value="Singapore">Singapore</option>
-                <option value="Panama">Panama</option>
-                <option value="Liberia">Liberia</option>
-                <option value="Marshall Islands">Marshall Islands</option>
-                <option value="United Kingdom">United Kingdom</option>
-            </select>
+        <div class="map-layer-group">
+            <button class="map-layer-btn active" id="aircraft-toggle" title="Left click: Filters | Right click: Toggle visibility">
+                Aircraft <span id="map-count-aircraft" class="map-count">0</span>
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div id="aircraft-filter-panel" class="filter-dropdown" style="display:none;">
+                <div class="filter-row">
+                    <label>Country</label>
+                    <select id="af-country" class="filter-select">
+                        <option value="">All Countries</option>
+                        <option value="China" selected>China</option>
+                        <option value="Taiwan">Taiwan</option>
+                        <option value="United States">United States</option>
+                        <option value="Japan">Japan</option>
+                        <option value="South Korea">South Korea</option>
+                        <option value="North Korea">North Korea</option>
+                        <option value="Russia">Russia</option>
+                    </select>
+                </div>
+                <div class="filter-row">
+                    <label>Type</label>
+                    <select id="af-type" class="filter-select">
+                        <option value="">All Types</option>
+                        <option value="Military">Military</option>
+                        <option value="Civilian">Civilian</option>
+                        <option value="Law Enforcement">Law Enforcement</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+                <div class="filter-row">
+                    <label>Min Altitude</label>
+                    <select id="af-altitude" class="filter-select">
+                        <option value="0">Any</option>
+                        <option value="1000">≥1,000 ft</option>
+                        <option value="5000">≥5,000 ft</option>
+                        <option value="10000">≥10,000 ft</option>
+                        <option value="20000">≥20,000 ft</option>
+                    </select>
+                </div>
+                <div class="filter-row filter-actions">
+                    <span id="af-result-count" class="filter-count">0 aircraft</span>
+                    <button id="af-apply" class="filter-apply-btn">Apply</button>
+                    <button id="af-reset" class="filter-reset-btn">Reset</button>
+                </div>
+            </div>
         </div>
-        <div class="filter-row">
-            <label>Type</label>
-            <select id="sf-type" class="filter-select">
-                <option value="">All Types</option>
-                <option value="Cargo">Cargo</option>
-                <option value="Tanker">Tanker</option>
-                <option value="Fishing">Fishing</option>
-                <option value="Military">Military</option>
-                <option value="Passenger">Passenger</option>
-                <option value="Tug">Tug</option>
-                <option value="Law Enforcement">Law Enforcement</option>
-                <option value="SAR">SAR</option>
-                <option value="Dredger">Dredger</option>
-                <option value="High-speed">High-speed</option>
-                <option value="Sailing">Sailing</option>
-                <option value="Yacht">Yacht</option>
-                <option value="Other">Other</option>
-            </select>
-        </div>
-        <div class="filter-row">
-            <label>Min Speed</label>
-            <select id="sf-speed" class="filter-select">
-                <option value="0">Any</option>
-                <option value="0.5" selected>Moving (≥0.5 kn)</option>
-                <option value="3">≥3 kn</option>
-                <option value="8">≥8 kn</option>
-                <option value="15">≥15 kn</option>
-            </select>
-        </div>
-        <div class="filter-row filter-actions">
-            <span id="sf-result-count" class="filter-count">0 ships</span>
-            <button id="sf-apply" class="filter-apply-btn">Apply</button>
-            <button id="sf-reset" class="filter-reset-btn">Reset</button>
+
+        <div class="map-layer-group">
+            <button class="map-layer-btn active" id="ships-toggle" title="Left click: Filters | Right click: Toggle visibility">
+                Ships <span id="map-count-ships" class="map-count">0</span>
+                <span class="dropdown-arrow">▼</span>
+            </button>
+            <div id="ships-filter-panel" class="filter-dropdown" style="display:none;">
+                <div class="filter-row">
+                    <label>Flag</label>
+                    <select id="sf-country" class="filter-select">
+                        <option value="">All Countries</option>
+                        <option value="China" selected>China</option>
+                        <option value="Taiwan">Taiwan</option>
+                        <option value="United States">United States</option>
+                        <option value="Japan">Japan</option>
+                        <option value="South Korea">South Korea</option>
+                        <option value="North Korea">North Korea</option>
+                        <option value="Russia">Russia</option>
+                        <option value="Singapore">Singapore</option>
+                        <option value="Panama">Panama</option>
+                        <option value="Liberia">Liberia</option>
+                        <option value="Marshall Islands">Marshall Islands</option>
+                        <option value="United Kingdom">United Kingdom</option>
+                    </select>
+                </div>
+                <div class="filter-row">
+                    <label>Type</label>
+                    <select id="sf-type" class="filter-select">
+                        <option value="">All Types</option>
+                        <option value="Cargo">Cargo</option>
+                        <option value="Tanker">Tanker</option>
+                        <option value="Fishing">Fishing</option>
+                        <option value="Military">Military</option>
+                        <option value="Passenger">Passenger</option>
+                        <option value="Tug">Tug</option>
+                        <option value="Law Enforcement" selected>Law Enforcement</option>
+                        <option value="SAR">SAR</option>
+                        <option value="Dredger">Dredger</option>
+                        <option value="High-speed">High-speed</option>
+                        <option value="Sailing">Sailing</option>
+                        <option value="Yacht">Yacht</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="filter-row">
+                    <label>Min Speed</label>
+                    <select id="sf-speed" class="filter-select">
+                        <option value="0" selected>Any</option>
+                        <option value="0.5">Moving (≥0.5 kn)</option>
+                        <option value="3">≥3 kn</option>
+                        <option value="8">≥8 kn</option>
+                        <option value="15">≥15 kn</option>
+                    </select>
+                </div>
+                <div class="filter-row filter-actions">
+                    <span id="sf-result-count" class="filter-count">0 ships</span>
+                    <button id="sf-apply" class="filter-apply-btn">Apply</button>
+                    <button id="sf-reset" class="filter-reset-btn">Reset</button>
+                </div>
+            </div>
         </div>
     </div>
     <div id="threat-map"></div>
