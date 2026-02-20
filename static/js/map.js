@@ -60,11 +60,7 @@ const MapView = {
         this._setupIntegratedFilters();
 
         this.loadMilitary();
-
-        // Delay ship loading to ensure filters are properly initialized
-        setTimeout(() => {
-            this.loadShips();
-        }, 100);
+        this.loadShips();
     },
 
     // --- Layer toggles ---
@@ -474,17 +470,28 @@ const MapView = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    let initialized = false;
+
+    const initMap = () => {
+        if (initialized) return;
+        initialized = true;
+        setTimeout(() => MapView.init(), 50);
+    };
+
     const observer = new MutationObserver(() => {
         const mapTab = document.getElementById('tab-map');
         if (mapTab && mapTab.classList.contains('active')) {
             observer.disconnect();
-            setTimeout(() => MapView.init(), 50);
+            initMap();
         }
     });
+
     observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+
+    // Check if map tab is already active
     const mapTab = document.getElementById('tab-map');
     if (mapTab && mapTab.classList.contains('active')) {
         observer.disconnect();
-        setTimeout(() => MapView.init(), 50);
+        initMap();
     }
 });
