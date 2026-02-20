@@ -12,6 +12,7 @@ SHIPS_BROADCAST_INTERVAL = 30  # 30 seconds (batch AIS updates)
 # API Keys (from environment)
 OTX_API_KEY = os.getenv("OTX_API_KEY", "")
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY", "")
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
 # OpenSky credentials now loaded from opensky_credentials.json (OAuth2)
 
@@ -31,13 +32,15 @@ FOREX_SYMBOLS = {
     "USD/JPY": "C:USDJPY",
 }
 
-# US Stocks (secondary)
-MARKET_SYMBOLS = {
+CRYPTO_IDS = ["bitcoin"]
+
+# Finnhub: free tier supports real-time US stock quotes only
+# Forex stays on Polygon (delayed but functional)
+FINNHUB_STOCK_SYMBOLS = {
     "S&P 500": "SPY",
     "NASDAQ": "QQQ",
+    "Gold": "GLD",
 }
-
-CRYPTO_IDS = ["bitcoin", "ethereum"]
 
 # CoinGecko
 COINGECKO_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
@@ -50,6 +53,10 @@ FEAR_GREED_URL = "https://api.alternative.me/fng/"
 POLYGON_BASE_URL = "https://api.polygon.io"
 POLYGON_PREV_CLOSE_URL = f"{POLYGON_BASE_URL}/v2/aggs/ticker/{{ticker}}/prev"
 POLYGON_RANGE_URL = f"{POLYGON_BASE_URL}/v2/aggs/ticker/{{ticker}}/range/{{multiplier}}/{{timespan}}/{{from_date}}/{{to_date}}"
+
+# Finnhub
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
+FINNHUB_QUOTE_URL = f"{FINNHUB_BASE_URL}/quote"
 
 # OpenSky Network
 OPENSKY_API_URL = "https://opensky-network.org/api/states/all"
