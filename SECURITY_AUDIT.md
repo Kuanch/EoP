@@ -17,10 +17,10 @@ The EoP system has implemented several security measures but contains **CRITICAL
 **Issues Found**:
 - `.env` file has world-readable permissions (`-rwxrwxrwx`)
 - Contains exposed API keys for:
-  - **Polygon.io**: `[REDACTED]`
-  - **Finnhub**: `[REDACTED]`
-  - **Anthropic**: `[REDACTED]`
-  - **Secret Key**: `[REDACTED]`
+  - **Polygon.io**: `8rAa...` (REDACTED)
+  - **Finnhub**: `d6a8...` (REDACTED)
+  - **Anthropic**: `[REDACTED]...` (REDACTED)
+  - **Secret Key**: (REDACTED - regenerated)
 
 **Immediate Action Required**: Regenerate ALL API keys and fix file permissions.
 
