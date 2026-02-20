@@ -8,17 +8,26 @@ const MapView = {
     layers: { aircraft: true, ships: true },
     _allShips: [],       // raw data from server
     _filteredShips: [],   // after client-side filter
+    _allAircraft: [],    // raw aircraft data
+    _filteredAircraft: [], // after client-side filter
 
-    // Filter state
-    filters: {
+    // Filter states
+    shipFilters: {
         country: 'China',
+        type: 'Law Enforcement',
+        minSpeed: 0,
+    },
+    aircraftFilters: {
+        country: '',
         type: '',
-        minSpeed: 0.5,
+        minAltitude: 0,
     },
 
     init() {
         const mapEl = document.getElementById('threat-map');
-        if (!mapEl) return;
+        if (!mapEl) {
+            return;
+        }
 
         this.map = L.map('threat-map', { zoomControl: true, preferCanvas: true }).setView([25, 120], 4);
 
@@ -33,11 +42,18 @@ const MapView = {
         this.shipsLayer = L.layerGroup().addTo(this.map);
 
         // WebSocket listeners
-        WS.on('military', (data) => this.updateMilitary(data));
-        WS.on('ships', (data) => { this._allShips = data; this._applyShipFilters(); });
+        WS.on('military', (data) => {
+            this._allAircraft = data;
+            this._filteredAircraft = this._filterAircraft(this._allAircraft, this.aircraftFilters);
+            this._renderAircraft();
+        });
+        WS.on('ships', (data) => {
+            this._allShips = data;
+            this._filteredShips = this._filterShips(this._allShips, this.shipFilters);
+            this._renderShips(this._filteredShips);
+        });
 
-        this._setupToggles();
-        this._setupFilterPanel();
+        this._setupIntegratedFilters();
 
         this.loadMilitary();
         this.loadShips();
@@ -63,36 +79,186 @@ const MapView = {
         else this.map.removeLayer(this.shipsLayer);
     },
 
-    // --- Filter panel ---
+    // --- Integrated Filter System ---
 
-    _setupFilterPanel() {
-        const toggle = document.getElementById('ship-filter-toggle');
-        const panel = document.getElementById('ship-filter-panel');
-        if (!toggle || !panel) return;
+    _setupIntegratedFilters() {
+        // Aircraft filter dropdown and layer toggle
+        const aircraftBtn = document.getElementById('aircraft-toggle');
+        const aircraftPanel = document.getElementById('aircraft-filter-panel');
 
-        toggle.addEventListener('click', () => {
-            const open = panel.style.display !== 'none';
-            panel.style.display = open ? 'none' : 'block';
-            toggle.classList.toggle('active', !open);
+        if (aircraftBtn && aircraftPanel) {
+            // Left click - open/close dropdown
+            aircraftBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = aircraftPanel.style.display === 'block' || window.getComputedStyle(aircraftPanel).display === 'block';
+                this._closeAllFilterPanels();
+                if (!isOpen) {
+                    aircraftPanel.style.display = 'block';
+                    aircraftBtn.classList.add('dropdown-open');
+                }
+            });
+
+            // Right click - toggle layer visibility
+            aircraftBtn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.layers.aircraft = !this.layers.aircraft;
+                aircraftBtn.classList.toggle('active', this.layers.aircraft);
+                this._applyLayers();
+                this._closeAllFilterPanels();
+            });
+
+            // Aircraft filter controls with live preview
+            const aircraftInputs = ['af-country', 'af-type', 'af-altitude'];
+            aircraftInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('change', () => this._updateAircraftFilterPreview());
+                    el.addEventListener('input', () => this._updateAircraftFilterPreview());
+                }
+            });
+
+            // Initialize preview
+            setTimeout(() => this._updateAircraftFilterPreview(), 100);
+
+            const afApply = document.getElementById('af-apply');
+            const afReset = document.getElementById('af-reset');
+            if (afApply) afApply.addEventListener('click', () => this._applyAircraftFilters());
+            if (afReset) afReset.addEventListener('click', () => this._resetAircraftFilters());
+        }
+
+        // Ships filter dropdown and layer toggle
+        const shipsBtn = document.getElementById('ships-toggle');
+        const shipsPanel = document.getElementById('ships-filter-panel');
+
+        if (shipsBtn && shipsPanel) {
+            // Left click - open/close dropdown
+            shipsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                const isOpen = shipsPanel.style.display === 'block' || window.getComputedStyle(shipsPanel).display === 'block';
+                this._closeAllFilterPanels();
+                if (!isOpen) {
+                    shipsPanel.style.display = 'block';
+                    shipsBtn.classList.add('dropdown-open');
+                }
+            });
+
+            // Right click - toggle layer visibility
+            shipsBtn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.layers.ships = !this.layers.ships;
+                shipsBtn.classList.toggle('active', this.layers.ships);
+                this._applyLayers();
+                this._closeAllFilterPanels();
+            });
+
+            // Ships filter controls with live preview
+            const shipInputs = ['sf-country', 'sf-type', 'sf-speed'];
+            shipInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('change', () => this._updateShipFilterPreview());
+                    el.addEventListener('input', () => this._updateShipFilterPreview());
+                }
+            });
+
+            // Initialize preview
+            setTimeout(() => this._updateShipFilterPreview(), 100);
+
+            const sfApply = document.getElementById('sf-apply');
+            const sfReset = document.getElementById('sf-reset');
+            if (sfApply) sfApply.addEventListener('click', () => this._applyShipFilters());
+            if (sfReset) sfReset.addEventListener('click', () => {
+                this._resetShipFilters();
+            });
+        }
+
+        // Close dropdowns when clicking outside, but not inside the panels
+        document.addEventListener('click', (e) => {
+            // Don't close if clicking on a button or inside a filter panel
+            if (e.target.closest('.map-layer-btn') || e.target.closest('.filter-dropdown')) {
+                return;
+            }
+            this._closeAllFilterPanels();
         });
 
-        // Live preview count on filter change
-        const inputs = ['sf-country', 'sf-type', 'sf-speed'];
-        inputs.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('change', () => this._updateFilterPreview());
+        // Prevent filter panels from closing when clicked inside
+        document.getElementById('aircraft-filter-panel')?.addEventListener('click', (e) => {
+            e.stopPropagation();
         });
-
-        // Apply button
-        const applyBtn = document.getElementById('sf-apply');
-        if (applyBtn) applyBtn.addEventListener('click', () => this._applyFiltersFromPanel());
-
-        // Reset button
-        const resetBtn = document.getElementById('sf-reset');
-        if (resetBtn) resetBtn.addEventListener('click', () => this._resetFilters());
+        document.getElementById('ships-filter-panel')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
     },
 
-    _readPanelFilters() {
+    _closeAllFilterPanels() {
+        const panels = ['aircraft-filter-panel', 'ships-filter-panel'];
+        const buttons = ['aircraft-toggle', 'ships-toggle'];
+
+        panels.forEach(id => {
+            const panel = document.getElementById(id);
+            if (panel) panel.style.display = 'none';
+        });
+
+        buttons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.classList.remove('dropdown-open');
+        });
+    },
+
+    // --- Aircraft Filter Methods ---
+
+    _readAircraftFilters() {
+        return {
+            country: (document.getElementById('af-country')?.value || ''),
+            type: (document.getElementById('af-type')?.value || ''),
+            minAltitude: parseFloat(document.getElementById('af-altitude')?.value || '0'),
+        };
+    },
+
+    _filterAircraft(aircraft, filters) {
+        return aircraft.filter(a => {
+            if (filters.country && (a.origin_country || '') !== filters.country) return false;
+            if (filters.type) {
+                // Basic type classification based on available data
+                let type = 'Civilian';
+                if (a.callsign && (a.callsign.includes('MIL') || a.callsign.length < 4)) type = 'Military';
+                if (filters.type !== type) return false;
+            }
+            if (filters.minAltitude > 0) {
+                const altitude = a.altitude || 0;
+                if (altitude < filters.minAltitude) return false;
+            }
+            return true;
+        });
+    },
+
+    _updateAircraftFilterPreview() {
+        const filters = this._readAircraftFilters();
+        const filtered = this._filterAircraft(this._allAircraft, filters);
+        const countEl = document.getElementById('af-result-count');
+        if (countEl) countEl.textContent = `${filtered.length} aircraft`;
+    },
+
+    _applyAircraftFilters() {
+        this.aircraftFilters = this._readAircraftFilters();
+        this._filteredAircraft = this._filterAircraft(this._allAircraft, this.aircraftFilters);
+        this._renderAircraft();
+        this._closeAllFilterPanels();
+    },
+
+    _resetAircraftFilters() {
+        document.getElementById('af-country').value = '';
+        document.getElementById('af-type').value = '';
+        document.getElementById('af-altitude').value = '0';
+        this._applyAircraftFilters();
+    },
+
+    // --- Ship Filter Methods ---
+
+    _readShipFilters() {
         return {
             country: (document.getElementById('sf-country')?.value || ''),
             type: (document.getElementById('sf-type')?.value || ''),
@@ -114,38 +280,27 @@ const MapView = {
         });
     },
 
-    _updateFilterPreview() {
-        const filters = this._readPanelFilters();
-        const count = this._filterShips(this._allShips, filters).length;
-        const el = document.getElementById('sf-result-count');
-        if (el) el.textContent = `${count} ships`;
-    },
-
-    _applyFiltersFromPanel() {
-        this.filters = this._readPanelFilters();
-        this._applyShipFilters();
-        // Close panel
-        const panel = document.getElementById('ship-filter-panel');
-        const toggle = document.getElementById('ship-filter-toggle');
-        if (panel) panel.style.display = 'none';
-        if (toggle) toggle.classList.remove('active');
-    },
-
-    _resetFilters() {
-        const country = document.getElementById('sf-country');
-        const type = document.getElementById('sf-type');
-        const speed = document.getElementById('sf-speed');
-        if (country) country.value = '';
-        if (type) type.value = '';
-        if (speed) speed.value = '0';
-        this.filters = { country: '', type: '', minSpeed: 0 };
-        this._applyShipFilters();
-        this._updateFilterPreview();
+    _updateShipFilterPreview() {
+        const filters = this._readShipFilters();
+        const filtered = this._filterShips(this._allShips, filters);
+        const countEl = document.getElementById('sf-result-count');
+        if (countEl) countEl.textContent = `${filtered.length} ships`;
     },
 
     _applyShipFilters() {
-        this._filteredShips = this._filterShips(this._allShips, this.filters);
+        const filters = this._readShipFilters();
+        this.shipFilters = filters;
+        this._filteredShips = this._filterShips(this._allShips, filters);
         this._renderShips(this._filteredShips);
+        this._updateShipFilterPreview();
+        this._closeAllFilterPanels();
+    },
+
+    _resetShipFilters() {
+        document.getElementById('sf-country').value = 'China';
+        document.getElementById('sf-type').value = 'Law Enforcement';
+        document.getElementById('sf-speed').value = '0';
+        this._applyShipFilters();
     },
 
     // --- Aircraft ---
@@ -163,9 +318,9 @@ const MapView = {
         });
     },
 
-    updateMilitary(assets) {
+    _renderAircraft() {
         this.militaryLayer.clearLayers();
-        assets.forEach(a => {
+        this._filteredAircraft.forEach(a => {
             if (a.lat == null || a.lon == null) return;
             const color = this._countryColor(a.origin_country);
             const marker = L.marker([a.lat, a.lon], {
@@ -181,7 +336,13 @@ const MapView = {
             );
             this.militaryLayer.addLayer(marker);
         });
-        this._updateCount('aircraft', assets.length);
+        this._updateCount('aircraft', this._filteredAircraft.length);
+    },
+
+    // Legacy method for compatibility - called by WebSocket
+    updateMilitary(assets) {
+        this._allAircraft = assets;
+        this._applyAircraftFilters();
     },
 
     _countryColor(country) {
@@ -269,6 +430,7 @@ const MapView = {
         if (el) el.textContent = count;
     },
 
+
     _esc(s) {
         if (!s) return '';
         const d = document.createElement('div');
@@ -290,8 +452,8 @@ const MapView = {
             if (resp.ok) {
                 const d = await resp.json();
                 this._allShips = d;
-                this._applyShipFilters();
-                this._updateFilterPreview();
+                this._filteredShips = this._filterShips(this._allShips, this.shipFilters);
+                this._renderShips(this._filteredShips);
             }
         } catch (e) {}
     }
