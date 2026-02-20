@@ -3,8 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <title>Eye of Providence - Login</title>
     <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent: #e94560;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0b0;
+            --border: #2a2a4a;
+            --red: #ff1744;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,110 +24,313 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated background gears */
+        .gear {
+            position: absolute;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            opacity: 0.1;
+        }
+
+        .gear:before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            border: 1px solid var(--border);
+            border-radius: 50%;
+        }
+
+        .gear1 {
+            width: 200px;
+            height: 200px;
+            top: 10%;
+            left: 15%;
+            animation: rotate 20s linear infinite;
+        }
+
+        .gear2 {
+            width: 150px;
+            height: 150px;
+            top: 60%;
+            right: 20%;
+            animation: rotate-reverse 15s linear infinite;
+        }
+
+        .gear3 {
+            width: 100px;
+            height: 100px;
+            top: 20%;
+            right: 10%;
+            animation: rotate 12s linear infinite;
+        }
+
+        .gear4 {
+            width: 80px;
+            height: 80px;
+            bottom: 20%;
+            left: 10%;
+            animation: rotate-reverse 8s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes rotate-reverse {
+            from { transform: rotate(360deg); }
+            to { transform: rotate(0deg); }
         }
 
         .login-container {
-            background: white;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
             padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            position: relative;
+            z-index: 10;
+            backdrop-filter: blur(10px);
         }
 
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
+        .login-header {
             text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .eye {
+            font-size: 28px;
+            color: var(--accent);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .brand-text {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .login-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-top: 4px;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            color: #555;
+            margin-bottom: 8px;
+            color: var(--text-primary);
             font-weight: 500;
+            font-size: 14px;
         }
 
         input[type="text"],
         input[type="password"] {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
+            padding: 14px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
             font-size: 14px;
-            transition: border-color 0.3s;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]::placeholder,
+        input[type="password"]::placeholder {
+            color: var(--text-secondary);
         }
 
         input[type="text"]:focus,
         input[type="password"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.1);
+            background: var(--bg-secondary);
         }
 
-        button {
+        .login-button {
             width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 14px;
+            background: var(--accent);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
 
-        button:hover {
-            transform: translateY(-2px);
+        .login-button:hover {
+            background: #d63954;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(233, 69, 96, 0.3);
         }
 
-        button:active {
+        .login-button:active {
             transform: translateY(0);
         }
 
+        .login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .error {
-            background: #fee;
-            color: #c33;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            border-left: 4px solid #c33;
+            background: rgba(255, 23, 68, 0.1);
+            color: var(--red);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255, 23, 68, 0.2);
+            font-size: 14px;
+        }
+
+        /* Loading spinner for button */
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .login-button.loading .spinner {
+            display: inline-block;
+        }
+
+        .login-button.loading .button-text {
+            opacity: 0.7;
+        }
+
+        /* Subtle grid pattern */
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(42, 42, 74, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(42, 42, 74, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: none;
+            border-radius: 12px;
         }
     </style>
 </head>
 <body>
+    <!-- Animated background gears -->
+    <div class="gear gear1"></div>
+    <div class="gear gear2"></div>
+    <div class="gear gear3"></div>
+    <div class="gear gear4"></div>
+
     <div class="login-container">
-        <h1>Login</h1>
+        <div class="login-header">
+            <div class="brand">
+                <span class="eye">&#9651;</span>
+                <span class="brand-text">Eye of Providence</span>
+            </div>
+            <div class="login-subtitle">Secure Access Portal</div>
+        </div>
 
         {% if error %}
         <div class="error">{{ error }}</div>
         {% endif %}
 
-        <form method="POST" action="/login">
+        <form method="POST" action="/login" id="loginForm">
             <!-- CSRF Token -->
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
+                <input type="text" id="username" name="username" placeholder="Enter your username" required autofocus>
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required>
             </div>
 
-            <button type="submit">Login</button>
+            <button type="submit" class="login-button" id="loginBtn">
+                <span class="spinner"></span>
+                <span class="button-text">Access Dashboard</span>
+            </button>
         </form>
     </div>
+
+    <script>
+        // Add loading state to login button
+        document.getElementById('loginForm').addEventListener('submit', function() {
+            const btn = document.getElementById('loginBtn');
+            btn.classList.add('loading');
+            btn.disabled = true;
+        });
+
+        // Add subtle animations to input focus
+        const inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.style.transform = 'translateY(-2px)';
+            });
+
+            input.addEventListener('blur', function() {
+                this.parentElement.style.transform = 'translateY(0)';
+            });
+        });
+
+        // Keyboard shortcut (Enter) enhancement
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !document.getElementById('loginBtn').disabled) {
+                document.getElementById('loginForm').submit();
+            }
+        });
+    </script>
 </body>
 </html>
