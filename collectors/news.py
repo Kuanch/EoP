@@ -88,7 +88,7 @@ class NewsCollector(BaseCollector):
                             "geo_lat": lat,
                             "geo_lon": lon,
                             "threat_score": threat_score,
-                            "collected_at": datetime.utcnow().isoformat(),
+                            "collected_at": datetime.now().isoformat(),
                         }
                         new_articles.append(article)
 
