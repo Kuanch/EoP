@@ -171,7 +171,7 @@ const ThreatsView = {
         const container = document.getElementById('threat-feed-list');
         if (!container) return;
         if (!feed.length) {
-            container.innerHTML = '<div style="color:var(--text-secondary); font-size:13px; padding:20px; text-align:center;">No threats detected yet. Waiting for collector data...</div>';
+            container.innerHTML = '<div style="color:var(--text-secondary); font-size:13px; padding:20px; text-align:center;">No high-risk threats detected. Showing score 5+ only.</div>';
             return;
         }
         container.innerHTML = feed.map(t => {

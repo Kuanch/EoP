@@ -24,6 +24,8 @@ from ws_manager import manager
 
 # Enhanced logging with security events
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # Suppress full URLs (contain API keys)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Security-specific logger
@@ -476,7 +478,8 @@ async def api_threats_feed(request: Request):
     if not _require_auth(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     from threat_engine import get_feed
-    return JSONResponse(get_feed())
+    feed = [t for t in get_feed() if t.get("final_score", 0) >= 5]
+    return JSONResponse(feed)
 
 
 @app.get("/api/threats/stats")
