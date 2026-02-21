@@ -403,7 +403,7 @@ class ShipCollector:
     async def _broadcast_loop(self):
         while self._running:
             await asyncio.sleep(SHIPS_BROADCAST_INTERVAL)
-            ships = get_ships_list()
+            ships = get_ships_list(filter_mode="all")
             if ships:
                 await manager.broadcast("ships", ships)
                 logger.info(f"[ships] Broadcast {len(ships)} ships")
