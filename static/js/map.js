@@ -36,13 +36,10 @@ const MapView = {
             maxBoundsViscosity: 1.0 // Prevent panning outside bounds completely
         }).setView([25, 120], 4);
 
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-            attribution: '&copy; Esri &copy; OpenStreetMap',
-            maxZoom: 16,
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18,
             subdomains: 'abcd',
-            keepBuffer: 2,
-            updateWhenIdle: true,
-            updateInterval: 200,
         }).addTo(this.map);
 
         this.shipsRenderer = L.canvas({ padding: 0.5 });
