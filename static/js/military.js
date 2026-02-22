@@ -33,7 +33,7 @@ const Military = {
             regions[a.region] = (regions[a.region] || 0) + 1;
         });
         el.innerHTML = Object.entries(regions).map(([r, c]) =>
-            `<div class="region-badge"><div class="count">${c}</div><div class="label">${r}</div></div>`
+            `<div class="region-badge"><div class="count">${c}</div><div class="label">${this.esc(r)}</div></div>`
         ).join('') || '<div style="color:var(--text-secondary)">No assets tracked</div>';
     },
 
