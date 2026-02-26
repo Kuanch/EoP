@@ -34,18 +34,20 @@ NTFY_TOPIC=eop-alerts
 ## Quick Start
 
 ```bash
-# 1. Create and activate virtual environment
+# 1. Create virtual environment
 python3 -m venv venv
-source venv/bin/activate
 
-# 2. Install dependencies
-pip install -r requirements.txt
+# 2. Install dependencies — always use the venv binary directly
+# (do NOT use `source venv/bin/activate` + pip, it may resolve to system pip)
+venv/bin/pip install -r requirements.txt
 
 # 3. Initialize database and create user
-python manage_users.py init
-python manage_users.py create admin
+# Database is stored at data/users.db (created automatically on init)
+venv/bin/python3 manage_users.py init
+venv/bin/python3 manage_users.py create admin
 
-# 4. Set API keys (optional, enhances data coverage)
+# 4. Set API keys in .env (optional, enhances data coverage)
+# Copy .env.example to .env and fill in keys, or export them:
 export POLYGON_API_KEY="your_key"        # polygon.io - forex/stocks
 export OTX_API_KEY="your_key"            # alienvault OTX - cyber threats
 export ANTHROPIC_API_KEY="your_key"      # anthropic - LLM threat assessment
@@ -54,11 +56,13 @@ export AISSTREAM_API_KEY="your_key"      # aisstream.io - live AIS ship data
 # 5. Start ntfy (optional, for push notifications)
 docker compose -f docker-compose.ntfy.yml up -d
 
-# 6. Run
-python main.py
+# 6. Run — use venv python directly to avoid PATH issues
+venv/bin/python3 main.py
 ```
 
 Open http://localhost:8000 and log in.
+
+> **Note:** If the `data/` directory and `data/users.db` already exist (e.g. cloning a production copy), skip step 3. The app will start with the existing database.
 
 ## Docker
 

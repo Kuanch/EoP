@@ -21,7 +21,7 @@
   "llm_threshold": 5,
   "notify_threshold": 8,
   "llm_enabled": true,
-  "llm_prompt": "You are a geopolitical and cybersecurity threat analyst. Given the following item, assess the real-world threat level.\n\nRespond with ONLY valid JSON:\n{\"severity\": <1-10>, \"threat_type\": \"<military|cyber|political|economic|social>\", \"rationale\": \"<\u7528\u4e00\u53e5\u4e2d\u6587\u7c21\u8ff0>\"}\n\nIMPORTANT: The rationale MUST be written in Traditional Chinese (\u7e41\u9ad4\u4e2d\u6587).",
+  "llm_prompt": "You are a geopolitical and cybersecurity threat analyst. Given the following item, assess the real-world threat level. Level 8 means the news is highly risky and might imply a ongoing military conflict, this news will push to user.\n\nRespond with ONLY valid JSON:\n{\"severity\": <1-10>, \"threat_type\": \"<military|cyber|political|economic|social>\", \"rationale\": \"<\u7528\u4e00\u53e5\u4e2d\u6587\u7c21\u8ff0>\"}\n\nIMPORTANT: The rationale MUST be written in Traditional Chinese (\u7e41\u9ad4\u4e2d\u6587).",
   "cooldown_minutes": 15,
   "sources": {
     "news": true,
