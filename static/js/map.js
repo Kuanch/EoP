@@ -10,6 +10,10 @@ const MapView = {
     _filteredShips: [],   // after client-side filter
     _allAircraft: [],    // raw aircraft data
     _filteredAircraft: [], // after client-side filter
+    _aircraftMarkers: new Map(),  // icao24 -> marker
+    _shipMarkers: new Map(),      // mmsi -> marker
+    _lastAircraftUpdate: null,
+    _lastShipUpdate: null,
 
     // Filter states
     shipFilters: {
@@ -47,19 +51,26 @@ const MapView = {
         this.militaryLayer = L.layerGroup().addTo(this.map);
         this.shipsLayer = L.layerGroup().addTo(this.map);
 
-        // WebSocket listeners
+        // WebSocket listeners — incremental updates
         WS.on('military', (data) => {
             this._allAircraft = data;
+            this._lastAircraftUpdate = Date.now();
             this._filteredAircraft = this._filterAircraft(this._allAircraft, this.aircraftFilters);
-            this._renderAircraft();
+            this._updateAircraftIncremental();
+            this._refreshTimestamp();
         });
         WS.on('ships', (data) => {
             this._allShips = data;
+            this._lastShipUpdate = Date.now();
             this._filteredShips = this._filterShips(this._allShips, this.shipFilters);
-            this._renderShips(this._filteredShips);
+            this._updateShipsIncremental();
+            this._refreshTimestamp();
         });
 
         this._setupIntegratedFilters();
+        this._initTimestampOverlay();
+        // Refresh timestamp display every 5s
+        setInterval(() => this._refreshTimestamp(), 5000);
 
         this.loadMilitary();
         this.loadShips();
@@ -328,24 +339,10 @@ const MapView = {
     },
 
     _renderAircraft() {
+        // Full re-render: clear marker cache and rebuild
         this.militaryLayer.clearLayers();
-        this._filteredAircraft.forEach(a => {
-            if (a.lat == null || a.lon == null) return;
-            const color = this._countryColor(a.origin_country);
-            const marker = L.marker([a.lat, a.lon], {
-                icon: this._aircraftIcon(a.heading, color),
-            });
-            marker.bindTooltip(
-                `<b>${this._esc(a.callsign || 'Unknown')}</b><br>` +
-                `Country: ${this._esc(a.origin_country || 'N/A')}<br>` +
-                `Alt: ${a.altitude ? Math.round(a.altitude) + 'm' : 'N/A'}<br>` +
-                `Heading: ${a.heading ? Math.round(a.heading) + '°' : 'N/A'}<br>` +
-                `Region: ${this._esc(a.region || '')}`,
-                { className: 'dark-tooltip' }
-            );
-            this.militaryLayer.addLayer(marker);
-        });
-        this._updateCount('aircraft', this._filteredAircraft.length);
+        this._aircraftMarkers.clear();
+        this._updateAircraftIncremental();
     },
 
     // Legacy method for compatibility - called by WebSocket
@@ -396,40 +393,161 @@ const MapView = {
     },
 
     _renderShips(ships) {
+        // Full re-render: clear marker cache and rebuild
         this.shipsLayer.clearLayers();
-        ships.forEach(s => {
-            if (s.lat == null || s.lon == null) return;
-            const color = this._countryColor(s.country);
-            const icon = this._shipIcon(s);
-            let marker;
-            if (icon) {
-                // SVG marker for special/unknown ships
-                marker = L.marker([s.lat, s.lon], { icon });
+        this._shipMarkers.clear();
+        this._updateShipsIncremental();
+    },
+
+    // --- Incremental Update Methods ---
+
+    _animateMarker(marker, newLatLng, duration) {
+        if (marker._animFrame) cancelAnimationFrame(marker._animFrame);
+        if (!marker._latlng) { marker.setLatLng(newLatLng); return; }
+        const start = marker.getLatLng();
+        const startTime = performance.now();
+        const animate = (now) => {
+            const t = Math.min((now - startTime) / duration, 1);
+            const lat = start.lat + (newLatLng[0] - start.lat) * t;
+            const lng = start.lng + (newLatLng[1] - start.lng) * t;
+            marker.setLatLng([lat, lng]);
+            if (t < 1) marker._animFrame = requestAnimationFrame(animate);
+            else marker._animFrame = null;
+        };
+        marker._animFrame = requestAnimationFrame(animate);
+    },
+
+    _updateAircraftIncremental() {
+        const activeIds = new Set();
+        this._filteredAircraft.forEach(a => {
+            if (a.lat == null || a.lon == null) return;
+            const id = a.icao24;
+            activeIds.add(id);
+            const existing = this._aircraftMarkers.get(id);
+            if (existing) {
+                // Update position with animation
+                this._animateMarker(existing, [a.lat, a.lon], 1000);
+                // Update icon (heading may have changed)
+                const color = this._countryColor(a.origin_country);
+                existing.setIcon(this._aircraftIcon(a.heading, color));
+                // Update tooltip content
+                existing.setTooltipContent(
+                    `<b>${this._esc(a.callsign || 'Unknown')}</b><br>` +
+                    `Country: ${this._esc(a.origin_country || 'N/A')}<br>` +
+                    `Alt: ${a.altitude ? Math.round(a.altitude) + 'm' : 'N/A'}<br>` +
+                    `Heading: ${a.heading ? Math.round(a.heading) + '°' : 'N/A'}<br>` +
+                    `Region: ${this._esc(a.region || '')}`
+                );
             } else {
-                // Canvas circleMarker for normal ships (fast)
-                marker = L.circleMarker([s.lat, s.lon], {
-                    renderer: this.shipsRenderer,
-                    radius: 3,
-                    fillColor: color,
-                    color: '#000',
-                    weight: 0.5,
-                    fillOpacity: 0.8,
+                // New aircraft — create marker
+                const color = this._countryColor(a.origin_country);
+                const marker = L.marker([a.lat, a.lon], {
+                    icon: this._aircraftIcon(a.heading, color),
                 });
+                marker.bindTooltip(
+                    `<b>${this._esc(a.callsign || 'Unknown')}</b><br>` +
+                    `Country: ${this._esc(a.origin_country || 'N/A')}<br>` +
+                    `Alt: ${a.altitude ? Math.round(a.altitude) + 'm' : 'N/A'}<br>` +
+                    `Heading: ${a.heading ? Math.round(a.heading) + '°' : 'N/A'}<br>` +
+                    `Region: ${this._esc(a.region || '')}`,
+                    { className: 'dark-tooltip' }
+                );
+                this.militaryLayer.addLayer(marker);
+                this._aircraftMarkers.set(id, marker);
             }
-            const speedStr = s.sog != null ? s.sog + ' kn' : 'N/A';
-            const headingStr = s.heading != null ? Math.round(s.heading) + '°' : 'N/A';
-            marker.bindTooltip(
-                `<b>${this._esc(s.name || 'Unknown')}</b><br>` +
-                `MMSI: ${this._esc(s.mmsi)}<br>` +
-                `Flag: ${this._esc(s.country || 'Unknown')}<br>` +
-                `Type: ${this._esc(s.vessel_type_name || 'Other')}<br>` +
-                `Speed: ${speedStr}<br>` +
-                `Heading: ${headingStr}`,
-                { className: 'dark-tooltip' }
-            );
-            this.shipsLayer.addLayer(marker);
         });
-        this._updateCount('ships', ships.length);
+        // Remove stale markers
+        for (const [id, marker] of this._aircraftMarkers) {
+            if (!activeIds.has(id)) {
+                this.militaryLayer.removeLayer(marker);
+                this._aircraftMarkers.delete(id);
+            }
+        }
+        this._updateCount('aircraft', this._filteredAircraft.length);
+    },
+
+    _updateShipsIncremental() {
+        const activeIds = new Set();
+        this._filteredShips.forEach(s => {
+            if (s.lat == null || s.lon == null) return;
+            const id = s.mmsi;
+            activeIds.add(id);
+            const existing = this._shipMarkers.get(id);
+            if (existing) {
+                // Update position with animation
+                this._animateMarker(existing, [s.lat, s.lon], 1000);
+                // Update tooltip content
+                const speedStr = s.sog != null ? s.sog + ' kn' : 'N/A';
+                const headingStr = s.heading != null ? Math.round(s.heading) + '°' : 'N/A';
+                existing.setTooltipContent(
+                    `<b>${this._esc(s.name || 'Unknown')}</b><br>` +
+                    `MMSI: ${this._esc(s.mmsi)}<br>` +
+                    `Flag: ${this._esc(s.country || 'Unknown')}<br>` +
+                    `Type: ${this._esc(s.vessel_type_name || 'Other')}<br>` +
+                    `Speed: ${speedStr}<br>` +
+                    `Heading: ${headingStr}`
+                );
+            } else {
+                // New ship — create marker
+                const color = this._countryColor(s.country);
+                const icon = this._shipIcon(s);
+                let marker;
+                if (icon) {
+                    marker = L.marker([s.lat, s.lon], { icon });
+                } else {
+                    marker = L.circleMarker([s.lat, s.lon], {
+                        renderer: this.shipsRenderer,
+                        radius: 3,
+                        fillColor: color,
+                        color: '#000',
+                        weight: 0.5,
+                        fillOpacity: 0.8,
+                    });
+                }
+                const speedStr = s.sog != null ? s.sog + ' kn' : 'N/A';
+                const headingStr = s.heading != null ? Math.round(s.heading) + '°' : 'N/A';
+                marker.bindTooltip(
+                    `<b>${this._esc(s.name || 'Unknown')}</b><br>` +
+                    `MMSI: ${this._esc(s.mmsi)}<br>` +
+                    `Flag: ${this._esc(s.country || 'Unknown')}<br>` +
+                    `Type: ${this._esc(s.vessel_type_name || 'Other')}<br>` +
+                    `Speed: ${speedStr}<br>` +
+                    `Heading: ${headingStr}`,
+                    { className: 'dark-tooltip' }
+                );
+                this.shipsLayer.addLayer(marker);
+                this._shipMarkers.set(id, marker);
+            }
+        });
+        // Remove stale markers
+        for (const [id, marker] of this._shipMarkers) {
+            if (!activeIds.has(id)) {
+                this.shipsLayer.removeLayer(marker);
+                this._shipMarkers.delete(id);
+            }
+        }
+        this._updateCount('ships', this._filteredShips.length);
+    },
+
+    // --- Timestamp Overlay ---
+
+    _initTimestampOverlay() {
+        const div = L.DomUtil.create('div', 'map-timestamp-overlay');
+        div.style.cssText = 'position:absolute;bottom:8px;left:8px;z-index:1000;background:rgba(0,0,0,0.7);color:#aaa;padding:4px 8px;border-radius:4px;font-size:11px;pointer-events:none;';
+        div.innerHTML = 'Aircraft: --  |  Ships: --';
+        this.map.getContainer().appendChild(div);
+        this._timestampEl = div;
+    },
+
+    _refreshTimestamp() {
+        if (!this._timestampEl) return;
+        const fmt = (ts) => {
+            if (!ts) return '--';
+            const s = Math.round((Date.now() - ts) / 1000);
+            return s < 5 ? 'just now' : s + 's ago';
+        };
+        this._timestampEl.innerHTML =
+            `✈ Aircraft: ${fmt(this._lastAircraftUpdate)}  |  🚢 Ships: ${fmt(this._lastShipUpdate)}`;
     },
 
     // --- Shared ---

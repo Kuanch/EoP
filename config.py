@@ -8,6 +8,7 @@ MARKETS_POLL_INTERVAL = 60     # 1 minute
 MILITARY_POLL_INTERVAL = 300   # 5 minutes (OpenSky free tier rate limits)
 CYBER_POLL_INTERVAL = 1800     # 30 minutes
 SHIPS_BROADCAST_INTERVAL = 30  # 30 seconds (batch AIS updates)
+MILITARY_BROADCAST_INTERVAL = 30  # 30 seconds (re-broadcast cached aircraft positions)
 
 # API Keys (from environment)
 OTX_API_KEY = os.getenv("OTX_API_KEY", "")
