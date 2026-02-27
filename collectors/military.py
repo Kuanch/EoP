@@ -9,7 +9,7 @@ import httpx
 
 from collectors.base import BaseCollector
 from config import (
-    MILITARY_POLL_INTERVAL, OPENSKY_API_URL,
+    MILITARY_POLL_INTERVAL, MILITARY_BROADCAST_INTERVAL, OPENSKY_API_URL,
     MONITORED_REGIONS, HTTP_TIMEOUT,
 )
 from ws_manager import manager
@@ -76,6 +76,18 @@ class MilitaryCollector(BaseCollector):
         except Exception as e:
             logger.error(f"[military] OAuth2 token error: {e}")
         return None
+
+    async def start(self):
+        """Start both the collector and a faster broadcast loop."""
+        asyncio.create_task(self._broadcast_loop())
+        await super().start()
+
+    async def _broadcast_loop(self):
+        """Re-broadcast cached aircraft positions every MILITARY_BROADCAST_INTERVAL seconds."""
+        while True:
+            await asyncio.sleep(MILITARY_BROADCAST_INTERVAL)
+            if assets_cache:
+                await manager.broadcast("military", list(assets_cache))
 
     async def collect(self):
         all_assets = []
