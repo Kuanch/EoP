@@ -402,6 +402,7 @@ const MapView = {
     // --- Incremental Update Methods ---
 
     _animateMarker(marker, newLatLng, duration) {
+        if (marker._animFrame) cancelAnimationFrame(marker._animFrame);
         if (!marker._latlng) { marker.setLatLng(newLatLng); return; }
         const start = marker.getLatLng();
         const startTime = performance.now();
@@ -410,9 +411,10 @@ const MapView = {
             const lat = start.lat + (newLatLng[0] - start.lat) * t;
             const lng = start.lng + (newLatLng[1] - start.lng) * t;
             marker.setLatLng([lat, lng]);
-            if (t < 1) requestAnimationFrame(animate);
+            if (t < 1) marker._animFrame = requestAnimationFrame(animate);
+            else marker._animFrame = null;
         };
-        requestAnimationFrame(animate);
+        marker._animFrame = requestAnimationFrame(animate);
     },
 
     _updateAircraftIncremental() {
@@ -428,6 +430,14 @@ const MapView = {
                 // Update icon (heading may have changed)
                 const color = this._countryColor(a.origin_country);
                 existing.setIcon(this._aircraftIcon(a.heading, color));
+                // Update tooltip content
+                existing.setTooltipContent(
+                    `<b>${this._esc(a.callsign || 'Unknown')}</b><br>` +
+                    `Country: ${this._esc(a.origin_country || 'N/A')}<br>` +
+                    `Alt: ${a.altitude ? Math.round(a.altitude) + 'm' : 'N/A'}<br>` +
+                    `Heading: ${a.heading ? Math.round(a.heading) + '°' : 'N/A'}<br>` +
+                    `Region: ${this._esc(a.region || '')}`
+                );
             } else {
                 // New aircraft — create marker
                 const color = this._countryColor(a.origin_country);
@@ -466,6 +476,17 @@ const MapView = {
             if (existing) {
                 // Update position with animation
                 this._animateMarker(existing, [s.lat, s.lon], 1000);
+                // Update tooltip content
+                const speedStr = s.sog != null ? s.sog + ' kn' : 'N/A';
+                const headingStr = s.heading != null ? Math.round(s.heading) + '°' : 'N/A';
+                existing.setTooltipContent(
+                    `<b>${this._esc(s.name || 'Unknown')}</b><br>` +
+                    `MMSI: ${this._esc(s.mmsi)}<br>` +
+                    `Flag: ${this._esc(s.country || 'Unknown')}<br>` +
+                    `Type: ${this._esc(s.vessel_type_name || 'Other')}<br>` +
+                    `Speed: ${speedStr}<br>` +
+                    `Heading: ${headingStr}`
+                );
             } else {
                 // New ship — create marker
                 const color = this._countryColor(s.country);
