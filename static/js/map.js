@@ -456,17 +456,12 @@ const MapView = {
 
     async loadShips() {
         try {
-            // Load China ships only, then apply Law Enforcement filter
-            const resp = await fetch('/api/ships?filter=china&country=China');
+            const resp = await fetch('/api/ships?filter=all');
             if (resp.ok) {
                 const d = await resp.json();
                 this._allShips = d;
-
-                // Apply default Law Enforcement filter immediately
                 this._filteredShips = this._filterShips(this._allShips, this.shipFilters);
                 this._renderShips(this._filteredShips);
-
-                console.log(`[Ships] Loaded ${d.length} China ships, showing ${this._filteredShips.length} Law Enforcement vessels`);
             }
         } catch (e) {
             console.error('[Ships] Load error:', e);

@@ -24,6 +24,8 @@ from ws_manager import manager
 
 # Enhanced logging with security events
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # Suppress full URLs (contain API keys)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Security-specific logger
@@ -39,6 +41,11 @@ init_db()
 
 # Environment detection
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
+
+# Allowed WebSocket origins — comma-separated in ALLOWED_ORIGINS env var
+# Defaults to production domain + localhost for dev
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "https://kuanchlee.com,http://localhost:8000,http://127.0.0.1:8000")
+ALLOWED_WS_ORIGINS = {o.strip() for o in _raw_origins.split(",") if o.strip()}
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -304,11 +311,15 @@ async def dashboard(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse("dashboard.html", {"request": request, "username": user})
+    csrf_token = generate_csrf_token()
+    return templates.TemplateResponse("dashboard.html", {"request": request, "username": user, "csrf_token": csrf_token})
 
 
 @app.post("/logout")
-async def logout(request: Request):
+async def logout(request: Request, csrf_token: str = Form(default="")):
+    if not validate_csrf_token(csrf_token):
+        security_logger.warning(f"Logout CSRF validation failed from {get_client_ip(request)}")
+        return RedirectResponse(url="/dashboard", status_code=302)
     session_token = request.cookies.get("session_token")
     if session_token:
         _delete_session(session_token)
@@ -321,6 +332,13 @@ async def logout(request: Request):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Validate Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH)
+    origin = websocket.headers.get("origin", "")
+    if origin not in ALLOWED_WS_ORIGINS:
+        security_logger.warning(f"WebSocket rejected — disallowed origin: {origin}")
+        await websocket.close(code=4003)
+        return
+
     # Check session auth from cookie (DB-backed)
     from database import SessionToken
     session_token = websocket.cookies.get("session_token")
@@ -476,7 +494,8 @@ async def api_threats_feed(request: Request):
     if not _require_auth(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     from threat_engine import get_feed
-    return JSONResponse(get_feed())
+    feed = [t for t in get_feed() if t.get("final_score", 0) >= 5]
+    return JSONResponse(feed)
 
 
 @app.get("/api/threats/stats")

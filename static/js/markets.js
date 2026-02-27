@@ -145,7 +145,7 @@ const Markets = {
             const sign = dir === 'up' ? '+' : '';
             const closed = i.is_open === false ? ' <span style="color:#555;font-size:10px;">CLOSED</span>' : '';
             return `<div class="ticker-item">
-                <span class="symbol">${i.name || i.symbol}</span>
+                <span class="symbol">${this.esc(i.name || i.symbol)}</span>
                 <span class="price">${this.fmtPrice(i)}</span>
                 <span class="change ${dir}">${sign}${(i.change_pct || 0).toFixed(2)}%</span>${closed}
             </div>`;
@@ -253,8 +253,8 @@ const Markets = {
         return `<div class="chart-panel">
             <div class="chart-header">
                 <div class="chart-title">
-                    <span class="chart-symbol">${item.symbol || key}</span>
-                    <span class="chart-name">${item.name || key}</span>${closedBadge}
+                    <span class="chart-symbol">${this.esc(item.symbol || key)}</span>
+                    <span class="chart-name">${this.esc(item.name || key)}</span>${closedBadge}
                 </div>
                 <div class="chart-price-info">
                     <span class="chart-price">${this.fmtPrice(item)}</span>
@@ -541,7 +541,9 @@ const Markets = {
         if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
         if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
         return n.toString();
-    }
+    },
+
+    esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 };
 
 document.addEventListener('DOMContentLoaded', () => Markets.init());

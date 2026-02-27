@@ -28,8 +28,11 @@ COPY collectors/ ./collectors/
 COPY templates/ ./templates/
 COPY static/ ./static/
 
-# Create directory for SQLite database
-RUN mkdir -p /app/data
+# Create non-root user and data directory, set permissions
+RUN mkdir -p /app/data && \
+    useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 
 # Expose port
 EXPOSE 8000

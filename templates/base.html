@@ -17,7 +17,7 @@
         <div class="right">
             <span id="ws-status" class="ws-status" title="WebSocket status"></span>
             <span class="username">{{ username }}</span>
-            <form method="POST" action="/logout" style="display:inline;margin:0;"><button type="submit" class="logout-btn" style="background:none;border:none;cursor:pointer;">Logout</button></form>
+            <form method="POST" action="/logout" style="display:inline;margin:0;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="logout-btn" style="background:none;border:none;cursor:pointer;">Logout</button></form>
         </div>
     </nav>
 
