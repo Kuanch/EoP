@@ -147,63 +147,85 @@ class MilitaryCollector(BaseCollector):
             except Exception as e:
                 logger.error(f"[military] broadcast error: {e}")
 
+    async def _fetch_opensky(self, client: httpx.AsyncClient) -> list[dict]:
+        """Fetch aircraft from OpenSky Network per-region bounding boxes."""
+        assets = []
+        token = await self._get_token(client)
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+        for i, (region_name, region_info) in enumerate(MONITORED_REGIONS.items()):
+            if i > 0:
+                await asyncio.sleep(5)
+            bbox = region_info["bbox"]
+            params = {
+                "lamin": bbox[0], "lamax": bbox[1],
+                "lomin": bbox[2], "lomax": bbox[3],
+            }
+            try:
+                resp = await client.get(OPENSKY_API_URL, params=params, headers=headers)
+                if resp.status_code == 429:
+                    logger.warning(f"[military] OpenSky rate limited for {region_name}, retrying in 10s")
+                    await asyncio.sleep(10)
+                    resp = await client.get(OPENSKY_API_URL, params=params, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    states = data.get("states", []) or []
+                    for s in states:
+                        if len(s) < 12:
+                            continue
+                        callsign = (s[1] or "").strip()
+                        lat = s[6]
+                        lon = s[5]
+                        alt = s[7] or s[13]
+                        heading = s[10]
+                        on_ground = s[8]
+
+                        if on_ground:
+                            continue
+
+                        assets.append({
+                            "callsign": callsign,
+                            "type": "aircraft",
+                            "lat": lat,
+                            "lon": lon,
+                            "altitude": round(alt, 0) if alt else None,
+                            "heading": round(heading, 0) if heading else None,
+                            "region": region_name,
+                            "source": "OpenSky",
+                            "icao24": s[0],
+                            "origin_country": s[2],
+                        })
+                else:
+                    logger.warning(f"[military] OpenSky {region_name}: {resp.status_code}")
+            except Exception as e:
+                logger.error(f"[military] OpenSky {region_name}: {e}")
+        return assets
+
     async def collect(self):
         all_assets = []
 
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            token = await self._get_token(client)
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            # Fetch from both sources concurrently
+            opensky_task = asyncio.create_task(self._fetch_opensky(client))
+            adsbfi_task = asyncio.create_task(self._fetch_adsbfi(client))
 
-            for i, (region_name, region_info) in enumerate(MONITORED_REGIONS.items()):
-                if i > 0:
-                    await asyncio.sleep(5)
-                bbox = region_info["bbox"]
-                params = {
-                    "lamin": bbox[0], "lamax": bbox[1],
-                    "lomin": bbox[2], "lomax": bbox[3],
-                }
-                try:
-                    resp = await client.get(OPENSKY_API_URL, params=params, headers=headers)
-                    if resp.status_code == 429:
-                        logger.warning(f"[military] OpenSky rate limited for {region_name}, retrying in 10s")
-                        await asyncio.sleep(10)
-                        resp = await client.get(OPENSKY_API_URL, params=params, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        states = data.get("states", []) or []
-                        for s in states:
-                            if len(s) < 12:
-                                continue
-                            callsign = (s[1] or "").strip()
-                            lat = s[6]
-                            lon = s[5]
-                            alt = s[7] or s[13]
-                            heading = s[10]
-                            on_ground = s[8]
+            opensky_assets = await opensky_task
+            adsbfi_assets = await adsbfi_task
 
-                            if on_ground:
-                                continue
-
-                            asset = {
-                                "callsign": callsign,
-                                "type": "aircraft",
-                                "lat": lat,
-                                "lon": lon,
-                                "altitude": round(alt, 0) if alt else None,
-                                "heading": round(heading, 0) if heading else None,
-                                "region": region_name,
-                                "source": "OpenSky",
-                                "icao24": s[0],
-                                "origin_country": s[2],
-                            }
-                            all_assets.append(asset)
-                    else:
-                        logger.warning(f"[military] OpenSky {region_name}: {resp.status_code}")
-                except Exception as e:
-                    logger.error(f"[military] OpenSky {region_name}: {e}")
+            # Merge: deduplicate by icao24, adsb.fi takes priority (richer metadata)
+            seen = {}
+            for asset in adsbfi_assets:
+                icao = asset.get("icao24", "").lower()
+                if icao:
+                    seen[icao] = asset
+            for asset in opensky_assets:
+                icao = asset.get("icao24", "").lower()
+                if icao and icao not in seen:
+                    seen[icao] = asset
+            all_assets = list(seen.values())
 
         assets_cache.clear()
         assets_cache.extend(all_assets)
         await manager.broadcast("military", all_assets)
-        logger.info(f"[military] Tracking {len(all_assets)} assets across {len(MONITORED_REGIONS)} regions")
+        logger.info(f"[military] Tracking {len(all_assets)} assets across {len(MONITORED_REGIONS)} regions (OpenSky: {len(opensky_assets)}, adsb.fi: {len(adsbfi_assets)})")
         return all_assets
