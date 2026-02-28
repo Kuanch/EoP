@@ -10,7 +10,7 @@ import httpx
 from collectors.base import BaseCollector
 from config import (
     MILITARY_POLL_INTERVAL, MILITARY_BROADCAST_INTERVAL, OPENSKY_API_URL,
-    MONITORED_REGIONS, HTTP_TIMEOUT,
+    MONITORED_REGIONS, HTTP_TIMEOUT, ADSBFI_MIL_URL,
 )
 from ws_manager import manager
 
@@ -75,6 +75,61 @@ class MilitaryCollector(BaseCollector):
                 logger.warning(f"[military] OAuth2 token request failed: {resp.status_code}")
         except Exception as e:
             logger.error(f"[military] OAuth2 token error: {e}")
+        return None
+
+    async def _fetch_adsbfi(self, client: httpx.AsyncClient) -> list[dict]:
+        """Fetch military aircraft from adsb.fi global military endpoint."""
+        try:
+            resp = await client.get(ADSBFI_MIL_URL, timeout=HTTP_TIMEOUT)
+            if resp.status_code == 200:
+                data = resp.json()
+                aircraft_list = data.get("ac", [])
+                assets = []
+                for ac in aircraft_list:
+                    lat = ac.get("lat")
+                    lon = ac.get("lon")
+                    if lat is None or lon is None:
+                        continue
+                    # Check if aircraft is on ground
+                    alt_baro = ac.get("alt_baro")
+                    if alt_baro == "ground":
+                        continue
+                    # Determine which monitored region this aircraft is in
+                    region = self._find_region(lat, lon)
+                    if not region:
+                        continue
+                    callsign = (ac.get("flight") or "").strip()
+                    alt = ac.get("alt_geom") or (alt_baro if isinstance(alt_baro, (int, float)) else None)
+                    # Convert feet to meters to match OpenSky format
+                    alt_meters = round(alt * 0.3048, 0) if alt else None
+                    heading = ac.get("track")
+                    assets.append({
+                        "callsign": callsign,
+                        "type": "aircraft",
+                        "lat": lat,
+                        "lon": lon,
+                        "altitude": alt_meters,
+                        "heading": round(heading, 0) if heading else None,
+                        "region": region,
+                        "source": "adsb.fi",
+                        "icao24": ac.get("hex", "").lower(),
+                        "origin_country": ac.get("ownOp") or ac.get("r") or "",
+                    })
+                logger.info(f"[military] adsb.fi returned {len(assets)} military aircraft in monitored regions")
+                return assets
+            else:
+                logger.warning(f"[military] adsb.fi: {resp.status_code}")
+        except Exception as e:
+            logger.error(f"[military] adsb.fi error: {e}")
+        return []
+
+    @staticmethod
+    def _find_region(lat: float, lon: float) -> str | None:
+        """Return the name of the monitored region containing this lat/lon, or None."""
+        for name, info in MONITORED_REGIONS.items():
+            bbox = info["bbox"]
+            if bbox[0] <= lat <= bbox[1] and bbox[2] <= lon <= bbox[3]:
+                return name
         return None
 
     async def run(self):
