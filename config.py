@@ -7,8 +7,8 @@ NEWS_POLL_INTERVAL = 300       # 5 minutes
 MARKETS_POLL_INTERVAL = 60     # 1 minute
 MILITARY_POLL_INTERVAL = 300   # 5 minutes (OpenSky free tier rate limits)
 CYBER_POLL_INTERVAL = 1800     # 30 minutes
-SHIPS_BROADCAST_INTERVAL = 30  # 30 seconds (batch AIS updates)
-MILITARY_BROADCAST_INTERVAL = 30  # 30 seconds (re-broadcast cached aircraft positions)
+SHIPS_BROADCAST_INTERVAL = 5   # 5 seconds (batch AIS updates)
+MILITARY_BROADCAST_INTERVAL = 5   # 5 seconds (re-broadcast cached aircraft positions)
 
 # API Keys (from environment)
 OTX_API_KEY = os.getenv("OTX_API_KEY", "")
@@ -62,11 +62,14 @@ FINNHUB_QUOTE_URL = f"{FINNHUB_BASE_URL}/quote"
 # OpenSky Network
 OPENSKY_API_URL = "https://opensky-network.org/api/states/all"
 
+# adsb.fi Open Data API (free, no auth required)
+ADSBFI_MIL_URL = "https://opendata.adsb.fi/api/v2/mil"
+
 # Monitored regions (bounding boxes: lat_min, lat_max, lon_min, lon_max)
 MONITORED_REGIONS = {
     "Taiwan Strait": {"bbox": [21.0, 27.0, 116.0, 123.0], "center": [24.0, 119.5]},
     "East Ukraine": {"bbox": [46.0, 52.0, 32.0, 40.0], "center": [49.0, 36.0]},
-    "Middle East": {"bbox": [28.0, 38.0, 40.0, 55.0], "center": [33.0, 44.0]},
+    "Middle East": {"bbox": [28.0, 38.0, 33.0, 55.0], "center": [33.0, 44.0]},
     "Korean Peninsula": {"bbox": [33.0, 43.0, 124.0, 132.0], "center": [38.0, 127.0]},
     "South China Sea": {"bbox": [5.0, 22.0, 105.0, 121.0], "center": [13.0, 113.0]},
 }
