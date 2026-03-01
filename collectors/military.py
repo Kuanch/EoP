@@ -128,15 +128,6 @@ class MilitaryCollector(BaseCollector):
         logger.info(f"[military] adsb.fi returned {len(assets)} aircraft in monitored regions")
         return assets
 
-    @staticmethod
-    def _find_region(lat: float, lon: float) -> str | None:
-        """Return the name of the monitored region containing this lat/lon, or None."""
-        for name, info in MONITORED_REGIONS.items():
-            bbox = info["bbox"]
-            if bbox[0] <= lat <= bbox[1] and bbox[2] <= lon <= bbox[3]:
-                return name
-        return None
-
     async def run(self):
         """Start both the collector loop and a faster broadcast loop."""
         asyncio.create_task(self._broadcast_loop())
@@ -176,7 +167,7 @@ class MilitaryCollector(BaseCollector):
                     data = resp.json()
                     states = data.get("states", []) or []
                     for s in states:
-                        if len(s) < 12:
+                        if len(s) < 14:
                             continue
                         callsign = (s[1] or "").strip()
                         lat = s[6]

@@ -190,10 +190,10 @@ Aircraft data is merged from two providers, deduplicated by ICAO24 hex code:
 
 | Source | Endpoint | Auth | Coverage | Notes |
 |--------|----------|------|----------|-------|
-| **OpenSky Network** | Bounding box queries per region | OAuth2 (client credentials) | Good in East Asia; sparse in Middle East, conflict zones | Free tier, 5 min poll interval, 5s delay between region queries |
+| **OpenSky Network** | Bounding box queries per region | OAuth2 (client credentials), falls back to anonymous | Good in East Asia; sparse in Middle East, conflict zones | Free tier (anonymous: stricter rate limits), 5 min poll interval, 5s delay between region queries |
 | **adsb.fi** | `/v3/lat/{lat}/lon/{lon}/dist/250` per region center | None (free, no key) | Good in East Asia; no receivers in Middle East, Ukraine, South China Sea | 1 req/sec rate limit, 250 NM max radius |
 
-When duplicates exist (same ICAO24 from both sources), adsb.fi takes priority due to richer metadata (aircraft type, operator info). Altitude from adsb.fi is converted from feet to meters to match OpenSky format.
+When duplicates exist (same ICAO24 from both sources), adsb.fi takes priority as a secondary validation source. Altitude from adsb.fi is converted from feet to meters to match OpenSky format.
 
 ### Coverage Limitations
 
