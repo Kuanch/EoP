@@ -63,7 +63,7 @@ FINNHUB_QUOTE_URL = f"{FINNHUB_BASE_URL}/quote"
 OPENSKY_API_URL = "https://opensky-network.org/api/states/all"
 
 # adsb.fi Open Data API (free, no auth required)
-ADSBFI_MIL_URL = "https://opendata.adsb.fi/api/v2/mil"
+ADSBFI_BASE_URL = "https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{dist}"
 
 # Monitored regions (bounding boxes: lat_min, lat_max, lon_min, lon_max)
 MONITORED_REGIONS = {
