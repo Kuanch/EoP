@@ -291,8 +291,13 @@ class CyberCollector(BaseCollector):
             except Exception as e:
                 logger.error(f"[cyber] DB persist error: {e}")
 
+        # If every feed failed, signal failure so freshness tracker doesn't show false green
+        feeds_with_data = sum(1 for c in source_counts.values() if c > 0)
+        if feeds_with_data == 0:
+            raise RuntimeError("All cyber feeds returned zero data")
+
         await manager.broadcast("cyber", {"events": events, "stats": stats_cache})
-        logger.info(f"[cyber] {len(events)} events, {total_iocs} IOCs")
+        logger.info(f"[cyber] {len(events)} events, {total_iocs} IOCs, {feeds_with_data}/5 feeds ok")
 
         # Threat engine assessment
         import threat_engine

@@ -68,7 +68,11 @@ class DataFreshnessTracker:
         src = self._sources.get(name)
         if src:
             src.last_error = time.time()
-            src.last_error_msg = str(error)[:200]
+            # Sanitize: strip URLs and file paths to avoid leaking internals
+            import re
+            msg = re.sub(r'https?://[^\s,)\'\"]+', '[url]', str(error)[:200])
+            msg = re.sub(r'[A-Za-z]:\\[\w\\.-]+|/[\w/.-]{3,}', '[path]', msg)
+            src.last_error_msg = msg
             src.error_count += 1
 
     def snapshot(self) -> dict:

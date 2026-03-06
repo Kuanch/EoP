@@ -231,7 +231,7 @@ class ShipCollector:
     def __init__(self):
         self.name = "ships"
         self._running = False
-        tracker.register("ships", SHIPS_BROADCAST_INTERVAL)
+        tracker.register("ships", TAIWAN_AIS_POLL_INTERVAL)
 
     async def run(self):
         self._running = True
@@ -341,6 +341,7 @@ class ShipCollector:
                 try:
                     msg = json.loads(raw)
                     self._process_aisstream_msg(msg)
+                    tracker.report_success("ships")
                 except json.JSONDecodeError:
                     continue
                 except Exception as e:

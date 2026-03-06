@@ -109,9 +109,7 @@ def classify_event(event: dict) -> dict:
         if _has_keyword(text, keyword):
             score += weight
 
-    if event_type in {"malware_url", "c2_community"}:
-        score = min(score, 4)
-    elif event_type == "cve":
+    if event_type == "cve":
         score += 1
 
     sector = _infer_sector(text)
@@ -122,6 +120,10 @@ def classify_event(event: dict) -> dict:
         score += 2
     if sector in {"government", "military", "satellite", "critical_infra"}:
         score += 2
+
+    # Cap noisy community feeds AFTER all bonuses to prevent false escalation
+    if event_type in {"malware_url", "c2_community"}:
+        score = min(score, 5)
 
     if score >= 9:
         escalation_level = "strategic"
