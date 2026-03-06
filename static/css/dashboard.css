@@ -49,19 +49,15 @@ body {
     gap: 16px;
 }
 
-/* Data freshness badges */
-.data-health {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
-    margin-right: 8px;
-}
+/* Data freshness badges (inline in tab buttons) */
 .health-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: #555;
     display: inline-block;
+    vertical-align: middle;
+    margin-left: 2px;
     transition: background 0.3s;
     cursor: help;
 }
