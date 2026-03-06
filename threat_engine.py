@@ -74,6 +74,33 @@ def score_by_rules(text: str, rules: dict) -> float:
     return score
 
 
+async def _translate_for_notify(text: str) -> str | None:
+    """Translate notification text to Traditional Chinese via Claude Haiku."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 300,
+                    "messages": [
+                        {"role": "user", "content": f"Translate the following threat alert to Traditional Chinese (繁體中文). Keep it concise. Only return the translation, nothing else.\n\n{text[:500]}"}
+                    ],
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["content"][0]["text"].strip()
+    except Exception as e:
+        logger.warning(f"[threat] Translation failed: {e}")
+    return None
+
+
 async def call_llm(text: str, prompt: str) -> dict | None:
     """Call Claude Haiku for threat classification."""
     if not ANTHROPIC_API_KEY:
@@ -179,6 +206,11 @@ async def assess(source: str, title: str, text: str, extra: dict | None = None) 
             tag = "[LLM]" if used_llm else "[Rule]"
             rationale = assessment.get("llm_rationale") or ""
             msg = f"{title}\n{rationale}" if rationale else title
+            # Translate notification if LLM is enabled
+            if config.get("llm_enabled") and ANTHROPIC_API_KEY:
+                translated = await _translate_for_notify(msg)
+                if translated:
+                    msg = translated
             await notifier.send(
                 title=f"{tag} Threat [{source}]: {assessment['final_score']}/10",
                 message=msg,
