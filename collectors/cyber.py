@@ -1,5 +1,7 @@
-"""Cyber threat intelligence collector: CISA KEV, Abuse.ch, AlienVault OTX."""
+"""Cyber threat intelligence collector: CISA KEV, Abuse.ch, OTX, URLhaus, C2Intel."""
 
+import csv
+import io
 import logging
 from datetime import datetime
 
@@ -8,14 +10,21 @@ import httpx
 from collectors.base import BaseCollector
 from config import (
     CYBER_POLL_INTERVAL, CISA_KEV_URL, FEODO_URL,
-    OTX_PULSE_URL, OTX_API_KEY, HTTP_TIMEOUT, HTTP_USER_AGENT,
+    OTX_PULSE_URL, OTX_API_KEY, URLHAUS_CSV_URL, C2INTEL_CSV_URL,
+    HTTP_TIMEOUT, HTTP_USER_AGENT,
 )
 from ws_manager import manager
 
 logger = logging.getLogger(__name__)
 
 cyber_cache: list[dict] = []
-stats_cache: dict = {"total_iocs": 0, "active_campaigns": 0, "new_cves": 0, "threat_level": "Low"}
+stats_cache: dict = {
+    "total_iocs": 0,
+    "active_campaigns": 0,
+    "new_cves": 0,
+    "threat_level": "Low",
+    "source_counts": {},
+}
 
 
 class CyberCollector(BaseCollector):
@@ -26,11 +35,102 @@ class CyberCollector(BaseCollector):
     def set_db(self, session_factory):
         self.db_session_factory = session_factory
 
+    async def _fetch_urlhaus(self, client: httpx.AsyncClient) -> tuple[list[dict], int]:
+        resp = await client.get(URLHAUS_CSV_URL)
+        resp.raise_for_status()
+
+        rows: list[str] = []
+        for line in resp.text.splitlines():
+            if not line.strip():
+                continue
+            if line.startswith("# id,"):
+                rows.append(line.lstrip("# ").strip())
+                continue
+            if line.startswith("#"):
+                continue
+            rows.append(line)
+
+        if not rows:
+            return [], 0
+
+        reader = csv.DictReader(io.StringIO("\n".join(rows)))
+        events = []
+        online_count = 0
+
+        for row in reader:
+            if row.get("url_status") != "online":
+                continue
+            online_count += 1
+            if len(events) >= 20:
+                continue
+
+            tags = row.get("tags", "").strip()
+            threat = row.get("threat", "").replace("_", " ").strip() or "malware"
+            description = threat.title()
+            if tags:
+                description = f"{description} | Tags: {tags[:120]}"
+
+            events.append({
+                "type": "malware_url",
+                "title": row.get("url", "Unknown URL"),
+                "severity": "High",
+                "source": "URLhaus",
+                "description": description,
+                "ioc_count": 1,
+                "timestamp": row.get("dateadded", ""),
+            })
+
+        return events, online_count
+
+    async def _fetch_c2intel(self, client: httpx.AsyncClient) -> tuple[list[dict], int]:
+        resp = await client.get(C2INTEL_CSV_URL)
+        resp.raise_for_status()
+
+        rows = []
+        for line in resp.text.splitlines():
+            if not line.strip():
+                continue
+            if line.startswith("#ip,"):
+                rows.append(line.lstrip("# ").strip())
+                continue
+            rows.append(line)
+
+        reader = csv.DictReader(io.StringIO("\n".join(rows)))
+        events = []
+        row_count = 0
+
+        for row in reader:
+            ip = (row.get("ip") or "").strip()
+            ioc = (row.get("ioc") or "").strip()
+            if not ip:
+                continue
+            row_count += 1
+            if len(events) >= 20:
+                continue
+            events.append({
+                "type": "c2_community",
+                "title": f"C2 Indicator: {ip}",
+                "severity": "Medium",
+                "source": "C2IntelFeeds",
+                "description": ioc or "Community-reported C2 indicator",
+                "ioc_count": 1,
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+
+        return events, row_count
+
     async def collect(self):
         events = []
         total_iocs = 0
         new_cves = 0
         active_campaigns = 0
+        source_counts = {
+            "cisa_kev": 0,
+            "feodo": 0,
+            "otx": 0,
+            "urlhaus": 0,
+            "c2intel": 0,
+        }
 
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": HTTP_USER_AGENT}) as client:
             # CISA KEV
@@ -54,6 +154,7 @@ class CyberCollector(BaseCollector):
                             "timestamp": v.get("dateAdded", ""),
                         })
                     total_iocs += len(recent)
+                    source_counts["cisa_kev"] = len(recent)
             except Exception as e:
                 logger.error(f"[cyber] CISA KEV: {e}")
 
@@ -79,6 +180,7 @@ class CyberCollector(BaseCollector):
                                 "timestamp": entry.get("first_seen", entry.get("date_added", "")),
                             })
                         total_iocs += len(active)
+                        source_counts["feodo"] = len(active)
             except Exception as e:
                 logger.error(f"[cyber] Abuse.ch: {e}")
 
@@ -104,15 +206,36 @@ class CyberCollector(BaseCollector):
                                 "timestamp": pulse.get("created", ""),
                             })
                             total_iocs += ioc_count
+                            source_counts["otx"] += ioc_count
                 except Exception as e:
                     logger.error(f"[cyber] OTX: {e}")
 
-        # Determine threat level
-        if total_iocs > 100 or new_cves > 5:
+            # URLhaus malware URLs
+            try:
+                urlhaus_events, urlhaus_count = await self._fetch_urlhaus(client)
+                events.extend(urlhaus_events)
+                total_iocs += urlhaus_count
+                source_counts["urlhaus"] = urlhaus_count
+            except Exception as e:
+                logger.error(f"[cyber] URLhaus: {e}")
+
+            # Community C2 feed
+            try:
+                c2intel_events, c2intel_count = await self._fetch_c2intel(client)
+                events.extend(c2intel_events)
+                total_iocs += c2intel_count
+                source_counts["c2intel"] = c2intel_count
+            except Exception as e:
+                logger.error(f"[cyber] C2IntelFeeds: {e}")
+
+        effective_iocs = sum(min(count, 40) for count in source_counts.values())
+
+        # Determine threat level without letting very large community feeds pin the score forever.
+        if effective_iocs > 120 or new_cves > 5:
             threat_level = "Critical"
-        elif total_iocs > 50 or new_cves > 2:
+        elif effective_iocs > 60 or new_cves > 2:
             threat_level = "High"
-        elif total_iocs > 20:
+        elif effective_iocs > 20:
             threat_level = "Medium"
         else:
             threat_level = "Low"
@@ -128,6 +251,7 @@ class CyberCollector(BaseCollector):
             "active_campaigns": active_campaigns,
             "new_cves": new_cves,
             "threat_level": threat_level,
+            "source_counts": source_counts,
         })
 
         # Persist to DB

@@ -272,15 +272,26 @@ git commit -m "feat: add strategic ports map layer"
 
 ---
 
-## Implementation Order
+## Progress
 
-1. **Task 3** (Cyber feeds) — smallest change, modifies existing collector only
-2. **Task 4** (Trade routes) — static data, no collector needed, high visual impact
-3. **Task 7** (Strategic ports) — static data, complements trade routes
-4. **Task 1** (NGA warnings) — new collector, enriches ship tracking
-5. **Task 2** (USGS earthquakes) — new collector, new data domain
-6. **Task 5** (GDELT) — new collector, enriches existing heatmap
-7. **Task 6** (GPS jamming) — requires research on data availability first
+### Completed
+- [x] **Task 0: Data Freshness System** (added per Codex recommendation)
+  - PR: https://github.com/Kuanch/EoP/pull/12
+  - Branch: `feature/data-freshness-system`
+  - Codex (GPT-5.4) reviewed, 3 issues fixed
+- [x] **Task 3: Additional Cyber Threat Feeds**
+  - Added URLhaus and C2IntelFeeds to `collectors/cyber.py`
+  - Updated cyber stats to expose per-source counts and 5-feed activity
+
+### Implementation Order (remaining)
+
+1. **Task 4** (Trade routes) — static data, no collector needed, high visual impact
+2. **Task 7** (Strategic ports) — static data, complements trade routes
+3. **Task 1** (NGA warnings) — new collector, enriches ship tracking
+4. **Task 2** (USGS earthquakes) — new collector, new data domain
+5. **Task 5** (GDELT) — new collector, enriches existing heatmap
+6. **Task 6** (GPS jamming) — requires research on data availability first
+7. **Task 8: Travel Advisories** (added per Codex recommendation) — RSS from US/UK/AU/NZ govts, boosts regional threat scores
 
 ---
 
@@ -293,6 +304,5 @@ These require API keys or more complex integration:
 - **Cloudflare Radar outages** — enterprise only
 - **Wingbits ADS-B** — commercial/paid
 - **FAA ASWS airport delays** — free but US-only
-- **Travel advisories** — RSS feeds from US/UK/AU/NZ governments
 - **Telegram OSINT feed** — requires Telegram API credentials + relay server
 - **3D Globe** — major frontend rewrite (globe.gl + Three.js)

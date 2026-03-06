@@ -2,7 +2,7 @@
 
 const Cyber = {
     events: [],
-    stats: { total_iocs: 0, active_campaigns: 0, new_cves: 0, threat_level: 'Low' },
+    stats: { total_iocs: 0, active_campaigns: 0, new_cves: 0, threat_level: 'Low', source_counts: {} },
 
     init() {
         WS.on('cyber', (d) => { this.events = d.events || []; this.stats = d.stats || this.stats; this.render(); });
@@ -31,11 +31,13 @@ const Cyber = {
         if (!el) return;
         const s = this.stats;
         const lvlClass = s.threat_level === 'Critical' ? 'critical' : s.threat_level === 'High' ? 'high' : '';
+        const activeFeeds = Object.values(s.source_counts || {}).filter((count) => Number(count) > 0).length;
         el.innerHTML = `
             <div class="cyber-stat ${lvlClass}"><div class="value">${s.threat_level}</div><div class="label">Threat Level</div></div>
             <div class="cyber-stat"><div class="value">${s.total_iocs}</div><div class="label">Total IOCs</div></div>
             <div class="cyber-stat"><div class="value">${s.active_campaigns}</div><div class="label">Active Campaigns</div></div>
             <div class="cyber-stat"><div class="value">${s.new_cves}</div><div class="label">New CVEs Today</div></div>
+            <div class="cyber-stat"><div class="value">${activeFeeds}/5</div><div class="label">Feeds Active</div></div>
         `;
     },
 
