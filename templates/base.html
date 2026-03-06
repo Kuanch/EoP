@@ -15,6 +15,15 @@
             <span>Eye of Providence</span>
         </div>
         <div class="right">
+            <span id="data-health" class="data-health" title="Data source health">
+                <span class="health-dot" data-source="news" title="News"></span>
+                <span class="health-dot" data-source="markets" title="Markets"></span>
+                <span class="health-dot" data-source="military" title="Military"></span>
+                <span class="health-dot" data-source="cyber" title="Cyber"></span>
+                <span class="health-dot" data-source="ships" title="Ships"></span>
+                <span class="health-dot" data-source="pizzint" title="PizzINT"></span>
+                <span class="health-dot" data-source="polymarket" title="Polymarket"></span>
+            </span>
             <span id="ws-status" class="ws-status" title="WebSocket status"></span>
             <span class="username">{{ username }}</span>
             <form method="POST" action="/logout" style="display:inline;margin:0;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="logout-btn" style="background:none;border:none;cursor:pointer;">Logout</button></form>

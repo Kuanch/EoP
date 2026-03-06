@@ -49,6 +49,27 @@ body {
     gap: 16px;
 }
 
+/* Data freshness badges */
+.data-health {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    margin-right: 8px;
+}
+.health-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #555;
+    display: inline-block;
+    transition: background 0.3s;
+    cursor: help;
+}
+.health-dot.fresh { background: var(--green); }
+.health-dot.stale { background: var(--yellow); }
+.health-dot.down, .health-dot.error { background: var(--red); }
+.health-dot.no_data { background: #555; }
+
 .ws-status {
     width: 10px;
     height: 10px;

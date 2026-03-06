@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collectors.freshness import tracker
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,7 @@ class BaseCollector(ABC):
         self.name = name
         self.interval = interval
         self._running = False
+        tracker.register(name, interval)
 
     @abstractmethod
     async def collect(self) -> list | dict:
@@ -25,8 +27,10 @@ class BaseCollector(ABC):
         while self._running:
             try:
                 await self.collect()
+                tracker.report_success(self.name)
             except Exception as e:
                 logger.error(f"[{self.name}] collection error: {e}")
+                tracker.report_error(self.name, str(e))
             await asyncio.sleep(self.interval)
 
     def stop(self):

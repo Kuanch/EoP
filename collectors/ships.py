@@ -12,6 +12,7 @@ from config import (
     AISSTREAM_API_KEY, AISSTREAM_WS_URL,
     SHIP_REGIONS, SHIPS_BROADCAST_INTERVAL, HTTP_TIMEOUT,
 )
+from collectors.freshness import tracker
 from ws_manager import manager
 
 logger = logging.getLogger(__name__)
@@ -230,6 +231,7 @@ class ShipCollector:
     def __init__(self):
         self.name = "ships"
         self._running = False
+        tracker.register("ships", SHIPS_BROADCAST_INTERVAL)
 
     async def run(self):
         self._running = True
@@ -298,10 +300,14 @@ class ShipCollector:
                             }
                             count += 1
                         logger.info(f"[ships] Taiwan MPB: {count} ships loaded")
+                        if count > 0:
+                            tracker.report_success("ships")
                     else:
                         logger.warning(f"[ships] Taiwan MPB HTTP {resp.status_code}")
+                        tracker.report_error("ships", f"HTTP {resp.status_code}")
             except Exception as e:
                 logger.error(f"[ships] Taiwan MPB error: {e}")
+                tracker.report_error("ships", str(e))
             await asyncio.sleep(TAIWAN_AIS_POLL_INTERVAL)
 
     # --- AISstream.io (WebSocket) ---

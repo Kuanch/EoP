@@ -55,3 +55,37 @@ const WS = {
 };
 
 document.addEventListener('DOMContentLoaded', () => WS.connect());
+
+// Data freshness polling
+const DataHealth = {
+    poll() {
+        fetch('/api/health/data')
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(data => {
+                document.querySelectorAll('.health-dot').forEach(dot => {
+                    const src = dot.dataset.source;
+                    const info = data[src];
+                    if (!info) return;
+                    dot.className = 'health-dot ' + info.status;
+                    const age = info.last_success_ago;
+                    const ageText = age === null ? 'no data' :
+                        age < 60 ? Math.round(age) + 's ago' :
+                        age < 3600 ? Math.round(age / 60) + 'm ago' :
+                        Math.round(age / 3600) + 'h ago';
+                    let title = dot.getAttribute('title').split(' —')[0];
+                    title += ' — ' + info.status + ' (' + ageText + ')';
+                    if (info.error_count > 0) title += ' | ' + info.error_count + ' errors';
+                    if (info.last_error_msg) title += ': ' + info.last_error_msg;
+                    dot.setAttribute('title', title);
+                });
+            })
+            .catch(() => {});
+    },
+
+    start() {
+        this.poll();
+        setInterval(() => this.poll(), 30000);
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => DataHealth.start());

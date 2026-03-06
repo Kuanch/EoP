@@ -559,6 +559,17 @@ async def api_threats_config_post(request: Request):
         return JSONResponse({"error": f"Failed to save config: {str(e)}"}, status_code=500)
 
 
+# --- Data Freshness ---
+
+@app.get("/api/health/data")
+@limiter.limit("60/minute")
+async def health_data(request: Request):
+    if not _require_auth(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    from collectors.freshness import tracker
+    return JSONResponse(tracker.snapshot())
+
+
 # --- Background tasks ---
 
 @app.on_event("startup")
