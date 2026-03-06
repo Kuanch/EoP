@@ -8,6 +8,7 @@ from datetime import datetime
 import httpx
 
 from collectors.base import BaseCollector
+from cyber_escalation import classify_event
 from config import (
     CYBER_POLL_INTERVAL, CISA_KEV_URL, FEODO_URL,
     OTX_PULSE_URL, OTX_API_KEY, URLHAUS_CSV_URL, C2INTEL_CSV_URL,
@@ -24,6 +25,7 @@ stats_cache: dict = {
     "new_cves": 0,
     "threat_level": "Low",
     "source_counts": {},
+    "escalation_summary": {},
 }
 
 
@@ -131,6 +133,7 @@ class CyberCollector(BaseCollector):
             "urlhaus": 0,
             "c2intel": 0,
         }
+        escalation_summary = {"background": 0, "elevated": 0, "strategic": 0, "war_signals": 0}
 
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": HTTP_USER_AGENT}) as client:
             # CISA KEV
@@ -240,9 +243,21 @@ class CyberCollector(BaseCollector):
         else:
             threat_level = "Low"
 
-        # Sort by severity
+        # Add geopolitical escalation metadata before sorting and downstream scoring.
+        for event in events:
+            event.update(classify_event(event))
+            level = event.get("escalation_level", "background")
+            escalation_summary[level] = escalation_summary.get(level, 0) + 1
+            if event.get("war_signal"):
+                escalation_summary["war_signals"] += 1
+
+        # Sort by severity first, then escalation level.
         severity_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-        events.sort(key=lambda e: severity_order.get(e.get("severity", "Low"), 3))
+        escalation_order = {"strategic": 0, "elevated": 1, "background": 2}
+        events.sort(key=lambda e: (
+            severity_order.get(e.get("severity", "Low"), 3),
+            escalation_order.get(e.get("escalation_level", "background"), 2),
+        ))
 
         cyber_cache.clear()
         cyber_cache.extend(events)
@@ -252,6 +267,7 @@ class CyberCollector(BaseCollector):
             "new_cves": new_cves,
             "threat_level": threat_level,
             "source_counts": source_counts,
+            "escalation_summary": escalation_summary,
         })
 
         # Persist to DB
@@ -281,10 +297,22 @@ class CyberCollector(BaseCollector):
         # Threat engine assessment
         import threat_engine
         for e in events:
-            if e.get("severity") in ("Critical", "High"):
+            should_assess = (
+                e.get("escalation_level") in ("elevated", "strategic") or
+                (e.get("source") in {"CISA KEV", "AlienVault OTX"} and e.get("severity") in ("Critical", "High"))
+            )
+            if should_assess:
                 try:
                     await threat_engine.assess("cyber", e["title"], e.get("description", ""),
-                                               extra={"severity": e["severity"]})
+                                               extra={
+                                                   "severity": e["severity"],
+                                                   "geo_region": e.get("geo_region"),
+                                                   "escalation_level": e.get("escalation_level"),
+                                                   "escalation_score": e.get("escalation_score"),
+                                                   "target_sector": e.get("target_sector"),
+                                                   "attribution_confidence": e.get("attribution_confidence"),
+                                                   "war_signal": e.get("war_signal"),
+                                               })
                 except Exception as ex:
                     logger.error(f"[cyber] Threat assess error: {ex}")
         return events

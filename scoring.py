@@ -52,9 +52,16 @@ def compute_region_scores(articles: list, military_assets: list, cyber_events: l
     # Cyber contribution
     for event in cyber_events:
         severity_map = {"critical": 10, "high": 7, "medium": 4, "low": 2}
+        escalation_map = {"strategic": 10, "elevated": 6, "background": 0}
         sev = event.get("severity", "low").lower()
-        region_scores.setdefault("Global", {"news": 0, "news_count": 0, "military": 0, "cyber": 0})
-        region_scores["Global"]["cyber"] += severity_map.get(sev, 1)
+        escalation_level = event.get("escalation_level", "background")
+        cyber_score = max(severity_map.get(sev, 1), escalation_map.get(escalation_level, 0))
+        if cyber_score <= 0:
+            continue
+
+        region = event.get("geo_region") if escalation_level != "background" else "Global"
+        region_scores.setdefault(region or "Global", {"news": 0, "news_count": 0, "military": 0, "cyber": 0})
+        region_scores[region or "Global"]["cyber"] += cyber_score
 
     # Normalize to 0-100
     result = {}
