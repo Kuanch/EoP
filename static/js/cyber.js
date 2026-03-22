@@ -2,7 +2,7 @@
 
 const Cyber = {
     events: [],
-    stats: { total_iocs: 0, active_campaigns: 0, new_cves: 0, threat_level: 'Low' },
+    stats: { total_iocs: 0, active_campaigns: 0, new_cves: 0, threat_level: 'Low', source_counts: {} },
 
     init() {
         WS.on('cyber', (d) => { this.events = d.events || []; this.stats = d.stats || this.stats; this.render(); });
@@ -31,11 +31,15 @@ const Cyber = {
         if (!el) return;
         const s = this.stats;
         const lvlClass = s.threat_level === 'Critical' ? 'critical' : s.threat_level === 'High' ? 'high' : '';
+        const activeFeeds = Object.values(s.source_counts || {}).filter((count) => Number(count) > 0).length;
+        const escalations = s.escalation_summary || {};
         el.innerHTML = `
             <div class="cyber-stat ${lvlClass}"><div class="value">${s.threat_level}</div><div class="label">Threat Level</div></div>
             <div class="cyber-stat"><div class="value">${s.total_iocs}</div><div class="label">Total IOCs</div></div>
             <div class="cyber-stat"><div class="value">${s.active_campaigns}</div><div class="label">Active Campaigns</div></div>
             <div class="cyber-stat"><div class="value">${s.new_cves}</div><div class="label">New CVEs Today</div></div>
+            <div class="cyber-stat"><div class="value">${activeFeeds}/5</div><div class="label">Feeds Active</div></div>
+            <div class="cyber-stat"><div class="value">${escalations.elevated || 0}/${escalations.strategic || 0}</div><div class="label">Elevated/Strategic</div></div>
         `;
     },
 
@@ -46,11 +50,15 @@ const Cyber = {
             <div class="card threat-card severity-${e.severity}">
                 <span class="severity-badge ${e.severity}">${e.severity}</span>
                 <span class="source-badge">${this.esc(e.source)}</span>
+                ${e.escalation_level && e.escalation_level !== 'background' ? `<span class="source-badge" style="margin-left:6px; background:${e.escalation_level === 'strategic' ? 'rgba(255,82,82,0.18)' : 'rgba(255,167,38,0.18)'}; color:${e.escalation_level === 'strategic' ? 'var(--red)' : 'var(--orange)'};">${this.esc(e.escalation_level)}</span>` : ''}
+                ${e.geo_region && e.geo_region !== 'Global' ? `<span class="source-badge" style="margin-left:6px;">${this.esc(e.geo_region)}</span>` : ''}
                 <div class="title" style="margin-top:6px">${this.esc(e.title)}</div>
                 <div class="summary" style="margin-top:4px">${this.esc(e.description)}</div>
                 <div class="meta" style="margin-top:6px">
                     <span>${timeAgo(e.timestamp)}</span>
                     <span>IOCs: ${e.ioc_count || 0}</span>
+                    ${e.target_sector && e.target_sector !== 'unknown' ? `<span>Sector: ${this.esc(e.target_sector)}</span>` : ''}
+                    ${e.war_signal ? '<span style="color:var(--orange)">War signal</span>' : ''}
                 </div>
             </div>
         `).join('') || '<div style="color:var(--text-secondary)">No threat events</div>';

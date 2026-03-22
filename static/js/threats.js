@@ -181,16 +181,23 @@ const ThreatsView = {
             const notifIcon = t.notified ? '<span style="color:var(--green);" title="Notification sent">&#9889;</span>' : '';
             const llmBadge = t.llm_score != null ? `<span class="severity-badge" style="background:rgba(68,138,255,0.2); color:var(--blue);">LLM: ${t.llm_score}/10</span>` : '';
             const typeBadge = t.llm_threat_type ? `<span class="severity-badge" style="background:rgba(255,255,255,0.05); color:var(--text-secondary);">${this._esc(t.llm_threat_type)}</span>` : '';
+            const escalationBadge = t.escalation_level && t.escalation_level !== 'background'
+                ? `<span class="severity-badge" style="background:${t.escalation_level === 'strategic' ? 'rgba(255,82,82,0.18)' : 'rgba(255,167,38,0.18)'}; color:${t.escalation_level === 'strategic' ? 'var(--red)' : 'var(--orange)'};">${this._esc(t.escalation_level)}</span>`
+                : '';
+            const regionMeta = t.geo_region && t.geo_region !== 'Global' ? `<div style="font-size:11px; color:var(--text-secondary);">Region: ${this._esc(t.geo_region)}</div>` : '';
+            const sectorMeta = t.target_sector && t.target_sector !== 'unknown' ? `<div style="font-size:11px; color:var(--text-secondary);">Sector: ${this._esc(t.target_sector)}</div>` : '';
+            const confidenceMeta = t.attribution_confidence ? `<div style="font-size:11px; color:var(--text-secondary);">Confidence: ${this._esc(t.attribution_confidence)}</div>` : '';
 
             return `<div class="card" style="border-left:3px solid ${borderColor}; margin-bottom:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:start; gap:8px;">
                     <div style="flex:1;">
                         <div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;">
                             <span class="source-badge">${this._esc(t.source)}</span>
-                            ${llmBadge}${typeBadge}${notifIcon}
+                            ${llmBadge}${typeBadge}${escalationBadge}${notifIcon}
                         </div>
                         <div style="font-size:14px; font-weight:600; margin-bottom:3px;">${this._esc(t.title)}</div>
                         ${t.llm_rationale ? `<div style="font-size:12px; color:var(--text-secondary); font-style:italic;">${this._esc(t.llm_rationale)}</div>` : ''}
+                        ${regionMeta}${sectorMeta}${confidenceMeta}
                     </div>
                     <div style="text-align:right; white-space:nowrap;">
                         <div style="font-size:20px; font-weight:700; color:${scoreColor};">${t.final_score}</div>

@@ -468,6 +468,39 @@ Update threat engine configuration. Partial updates supported.
 
 ---
 
+## Health
+
+### `GET /api/health/data`
+Data source freshness and upstream health status.
+- **Rate limit**: 60/min
+
+```json
+{
+  "news": {
+    "status": "fresh",
+    "last_success_ago": 42.3,
+    "last_error_msg": null,
+    "collect_count": 15,
+    "error_count": 0
+  },
+  "markets": {
+    "status": "stale",
+    "last_success_ago": 185.7,
+    "last_error_msg": "HTTPStatusError: 429",
+    "collect_count": 120,
+    "error_count": 2
+  }
+}
+```
+
+**Status values**: `fresh` (within 2x poll interval), `stale` (2-8x interval), `down` (>8x interval), `error` (never succeeded, has errors), `no_data` (never collected)
+
+**Tracked sources**: news, markets, military, cyber, ships, pizzint, polymarket
+
+**UI**: The navbar displays colored dots for each source — green (fresh), yellow (stale), red (down/error), grey (no data). Hover for details. Polled every 30s.
+
+---
+
 ## Error Responses
 
 All API errors follow this format:

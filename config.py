@@ -78,6 +78,8 @@ MONITORED_REGIONS = {
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.json"
 OTX_PULSE_URL = "https://otx.alienvault.com/api/v1/pulses/subscribed"
+URLHAUS_CSV_URL = "https://urlhaus.abuse.ch/downloads/csv_recent/"
+C2INTEL_CSV_URL = "https://raw.githubusercontent.com/drb-ra/C2IntelFeeds/master/feeds/IPC2s-30day.csv"
 
 # Geo-tagging keyword → region mapping
 GEO_KEYWORDS = {
