@@ -81,6 +81,7 @@ class DataFreshnessTracker:
         for name, src in self._sources.items():
             age = src.age_seconds
             result[name] = {
+                "source_name": name,
                 "status": src.status,
                 "last_success_ago": round(age, 1) if age != float("inf") else None,
                 "last_error_msg": src.last_error_msg or None,

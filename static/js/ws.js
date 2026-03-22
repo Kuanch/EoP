@@ -56,27 +56,45 @@ const WS = {
 
 document.addEventListener('DOMContentLoaded', () => WS.connect());
 
-// Data freshness polling
+// Data freshness polling — one aggregated dot per tab
+const BAD = ['down', 'error'];
+const WARN = ['stale', 'no_data'];
+
 const DataHealth = {
+    _ageText(age) {
+        if (age === null) return 'no data';
+        if (age < 60) return Math.round(age) + 's ago';
+        if (age < 3600) return Math.round(age / 60) + 'm ago';
+        return Math.round(age / 3600) + 'h ago';
+    },
+
     poll() {
         fetch('/api/health/data')
             .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
             .then(data => {
-                document.querySelectorAll('.health-dot').forEach(dot => {
-                    const src = dot.dataset.source;
-                    const info = data[src];
-                    if (!info) return;
-                    dot.className = 'health-dot ' + info.status;
-                    const age = info.last_success_ago;
-                    const ageText = age === null ? 'no data' :
-                        age < 60 ? Math.round(age) + 's ago' :
-                        age < 3600 ? Math.round(age / 60) + 'm ago' :
-                        Math.round(age / 3600) + 'h ago';
-                    let title = dot.getAttribute('title').split(' —')[0];
-                    title += ' — ' + info.status + ' (' + ageText + ')';
-                    if (info.error_count > 0) title += ' | ' + info.error_count + ' errors';
-                    if (info.last_error_msg) title += ': ' + info.last_error_msg;
-                    dot.setAttribute('title', title);
+                document.querySelectorAll('.health-dot[data-tab-health]').forEach(dot => {
+                    const sources = (dot.dataset.sources || '').split(',').filter(Boolean);
+                    // Build per-source info; treat missing sources as no_data
+                    const infos = sources.map(s => data[s] || { source_name: s, status: 'no_data', last_success_ago: null, error_count: 0, last_error_msg: null });
+
+                    const allBad = infos.every(i => BAD.includes(i.status));
+                    const anyBad = infos.some(i => BAD.includes(i.status) || WARN.includes(i.status));
+
+                    let status;
+                    if (allBad) status = 'down';
+                    else if (anyBad) status = 'stale';
+                    else status = 'fresh';
+
+                    dot.className = 'health-dot ' + status;
+
+                    const tabName = dot.dataset.tabHealth;
+                    const lines = infos.map(i => {
+                        let line = (i.source_name || '') + ': ' + i.status + ' (' + this._ageText(i.last_success_ago) + ')';
+                        if (i.error_count > 0) line += ' [' + i.error_count + ' err]';
+                        if (i.last_error_msg) line += ' ' + i.last_error_msg;
+                        return line;
+                    });
+                    dot.setAttribute('title', tabName + ' — ' + status + '\n' + lines.join('\n'));
                 });
             })
             .catch(() => {});
