@@ -71,6 +71,7 @@ MONITORED_REGIONS = {
     "Middle East": {"bbox": [28.0, 38.0, 33.0, 55.0], "center": [33.0, 44.0]},
     "Korean Peninsula": {"bbox": [33.0, 43.0, 124.0, 132.0], "center": [38.0, 127.0]},
     "South China Sea": {"bbox": [5.0, 22.0, 105.0, 121.0], "center": [13.0, 113.0]},
+    "East China Sea": {"bbox": [25.0, 35.0, 122.0, 132.0], "center": [30.0, 127.0]},
 }
 
 # Cyber sources

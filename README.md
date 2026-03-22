@@ -31,32 +31,49 @@ NTFY_URL=http://localhost:8090
 NTFY_TOPIC=eop-alerts
 ```
 
+For **iOS push notifications**, ntfy must relay through ntfy.sh upstream (APNS). Create `data/ntfy/server.yml`:
+```yaml
+base-url: "https://your-ntfy-domain.com"
+upstream-base-url: "https://ntfy.sh"
+```
+
+Restart ntfy after changing the config: `docker restart eop-ntfy`
+
 ## Quick Start
 
 ```bash
-# 1. Create virtual environment
+# 1. Install system dependencies (Debian/Ubuntu)
+# python3-venv is required but not always installed by default
+apt install python3.12-venv  # adjust version to match your python3
+
+# 2. Create virtual environment
 python3 -m venv venv
 
-# 2. Install dependencies — always use the venv binary directly
+# 3. Install dependencies — always use the venv binary directly
 # (do NOT use `source venv/bin/activate` + pip, it may resolve to system pip)
 venv/bin/pip install -r requirements.txt
 
-# 3. Initialize database and create user
+# 4. Create required directories
+mkdir -p logs data
+
+# 5. Initialize database and create user
 # Database is stored at data/users.db (created automatically on init)
 venv/bin/python3 manage_users.py init
 venv/bin/python3 manage_users.py create admin
 
-# 4. Set API keys in .env (optional, enhances data coverage)
+# 6. Set API keys in .env (optional, enhances data coverage)
 # Copy .env.example to .env and fill in keys, or export them:
+cp .env.example .env
 export POLYGON_API_KEY="your_key"        # polygon.io - forex/stocks
+export FINNHUB_API_KEY="your_key"        # finnhub.io - real-time forex/stocks
 export OTX_API_KEY="your_key"            # alienvault OTX - cyber threats
 export ANTHROPIC_API_KEY="your_key"      # anthropic - LLM threat assessment
 export AISSTREAM_API_KEY="your_key"      # aisstream.io - live AIS ship data
 
-# 5. Start ntfy (optional, for push notifications)
+# 7. Start ntfy (optional, for push notifications)
 docker compose -f docker-compose.ntfy.yml up -d
 
-# 6. Run — use venv python directly to avoid PATH issues
+# 8. Run — use venv python directly to avoid PATH issues
 venv/bin/python3 main.py
 ```
 
@@ -80,6 +97,7 @@ docker exec -it fastapi-login-app python manage_users.py create admin
 | `OTX_API_KEY` | No | AlienVault OTX cyber threat pulses |
 | `ANTHROPIC_API_KEY` | No | Claude Haiku LLM threat classification |
 | `AISSTREAM_API_KEY` | No | AISstream live ship tracking |
+| `FINNHUB_API_KEY` | No | Finnhub real-time forex/stock quotes |
 | `NTFY_URL` | No | ntfy server URL (default: http://localhost:8090) |
 | `NTFY_TOPIC` | No | ntfy topic name (default: eop-alerts) |
 
@@ -120,6 +138,48 @@ Backend
       ├── pizzint.py        Pentagon Pizza Index
       └── polymarket.py     Prediction market odds
 ```
+
+## Cloudflare Tunnel (Remote Access)
+
+For HTTPS access from outside your local network, use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/).
+
+1. Install cloudflared:
+```bash
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" \
+  | tee /etc/apt/sources.list.d/cloudflared.list
+apt update && apt install cloudflared
+```
+
+2. Authenticate and create a tunnel:
+```bash
+cloudflared tunnel login
+cloudflared tunnel create fastapi-login
+```
+
+3. Configure `~/.cloudflared/config.yml`:
+```yaml
+tunnel: <TUNNEL_UUID>
+credentials-file: /root/.cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: ntfy.yourdomain.com
+    service: http://localhost:8090
+  - hostname: yourdomain.com
+    service: http://localhost:8000
+  - hostname: "*.yourdomain.com"
+    service: http://localhost:8000
+  - service: http_status:404
+```
+
+4. Add DNS routes and start:
+```bash
+cloudflared tunnel route dns fastapi-login yourdomain.com
+cloudflared tunnel route dns fastapi-login ntfy.yourdomain.com
+cloudflared tunnel --config ~/.cloudflared/config.yml run fastapi-login
+```
+
+A systemd service file (`cloudflared.service`) is included for running the tunnel as a daemon.
 
 ## Security
 
