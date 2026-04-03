@@ -211,6 +211,22 @@ async def assess(source: str, title: str, text: str, extra: dict | None = None) 
                 translated = await _translate_for_notify(msg)
                 if translated:
                     msg = translated
+            # Append timeliness tag (e.g. "— 3h ago from BBC World")
+            pub_ts = assessment.get("published_ts")
+            feed_name = assessment.get("feed_name") or source
+            if pub_ts:
+                age_sec = time.time() - pub_ts
+                if age_sec < 60:
+                    age_str = "just now"
+                elif age_sec < 3600:
+                    age_str = f"{int(age_sec // 60)}m ago"
+                elif age_sec < 86400:
+                    age_str = f"{int(age_sec // 3600)}h ago"
+                else:
+                    age_str = f"{int(age_sec // 86400)}d ago"
+                msg += f"\n— {age_str} from {feed_name}"
+            elif feed_name != source:
+                msg += f"\n— from {feed_name}"
             await notifier.send(
                 title=f"{tag} Threat [{source}]: {assessment['final_score']}/10",
                 message=msg,
