@@ -23,6 +23,9 @@ NEWS_FEEDS = {
     "CNA World": "https://feeds.feedburner.com/rsscna/intworld",
     "CNA Mainland": "https://feeds.feedburner.com/rsscna/mainland",
     "CBS World": "https://www.cbsnews.com/latest/rss/world",
+    "Yonhap": "https://en.yna.co.kr/RSS/news.xml",
+    "The War Zone": "https://www.twz.com/feed",
+    "Breaking Defense": "https://breakingdefense.com/full-rss-feed/?v=2",
 }
 
 # Market symbols
