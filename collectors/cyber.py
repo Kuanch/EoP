@@ -200,6 +200,7 @@ class CyberCollector(BaseCollector):
                     inner = data[0] if isinstance(data, list) and data else data
                     entry = inner[0] if isinstance(inner, list) and inner else inner
                     if not isinstance(entry, dict):
+                        logger.warning(f"[cyber] Signal {code}/{ds}: unexpected response shape")
                         continue
                     values = entry.get("values", [])
                     if not values or not any(v is not None for v in values):
@@ -404,7 +405,7 @@ class CyberCollector(BaseCollector):
         # Run correlation
         correlations = await self._correlate(outage_events, cyber_news)
 
-        # Count feeds that returned data
+        # Count feeds that returned data (for display)
         feeds_ok = 0
         if outage_events or outage_alerts:
             feeds_ok += 1
@@ -412,6 +413,10 @@ class CyberCollector(BaseCollector):
             feeds_ok += 1
         if cves:
             feeds_ok += 1
+
+        # Preserve last-known-good signals on transient failure
+        if not any(s.get("datasources") for s in watched_signals.values()):
+            watched_signals = cyber_cache.get("watched_signals", {})
 
         now_iso = datetime.utcnow().isoformat() + "Z"
 
@@ -441,7 +446,8 @@ class CyberCollector(BaseCollector):
             f"{len(watched_signals)} watched ({sig_count} signals)"
         )
 
-        if feeds_ok == 0:
+        # Only raise if every HTTP call failed (not just empty results)
+        if feeds_ok == 0 and not watched_signals:
             raise RuntimeError("All cyber feeds returned zero data")
 
         return cyber_cache

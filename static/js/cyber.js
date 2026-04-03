@@ -221,7 +221,7 @@ const Cyber = {
         if (!signals || !Object.keys(signals).length) return;
 
         Object.entries(signals).forEach(([code, info]) => {
-            if (!info.lat || !info.lon || !info.datasources) return;
+            if (!info.lat || !info.lon || !info.datasources || !Object.keys(info.datasources).length) return;
 
             // Determine worst status across datasources
             const statuses = Object.values(info.datasources).map(d => d.status);
