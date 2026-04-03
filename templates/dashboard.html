@@ -53,14 +53,39 @@
 
 <!-- Cyber Tab -->
 <div id="tab-cyber" class="tab-content">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <!-- Stats + controls header -->
+    <div class="cyber-header">
         <div id="cyber-stats" class="cyber-stats" style="margin-bottom:0;"></div>
-        <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:var(--text-secondary); cursor:pointer; white-space:nowrap;">
-            <input type="checkbox" id="cyber-alerts-toggle" style="accent-color:var(--accent);">
-            Alerts
-        </label>
+        <div class="cyber-header-right">
+            <span id="cyber-last-updated" style="font-size:11px; color:var(--text-secondary);"></span>
+            <label style="font-size:12px; display:flex; align-items:center; gap:6px; color:var(--text-secondary); cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" id="cyber-alerts-toggle" style="accent-color:var(--accent);">
+                Push alerts
+            </label>
+        </div>
     </div>
-    <div id="cyber-events"></div>
+
+    <!-- Two-column on desktop, stacked on mobile -->
+    <div class="cyber-grid">
+        <!-- Left: Outage Map + List -->
+        <div class="cyber-map-container">
+            <div id="cyber-map"></div>
+            <div id="cyber-outage-list" style="margin-top:12px; max-height:250px; overflow-y:auto;"></div>
+            <div id="cyber-watched-panel" style="margin-top:12px;"></div>
+        </div>
+        <!-- Right: Cyber News + CISA KEV -->
+        <div class="cyber-news-container">
+            <h3>Cyber News</h3>
+            <div id="cyber-news-feed" style="max-height:380px; overflow-y:auto;"></div>
+            <div class="cyber-kev-container" style="margin-top:16px;">
+                <h3>CISA Known Exploited Vulnerabilities</h3>
+                <div id="cyber-kev-panel" style="max-height:200px; overflow-y:auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Correlations panel -->
+    <div id="cyber-correlations" style="margin-top:12px;"></div>
 </div>
 
 <!-- Map Tab -->
