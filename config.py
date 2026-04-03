@@ -84,7 +84,7 @@ CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_v
 IODA_API_BASE = "https://api.ioda.inetintel.cc.gatech.edu/v2"
 IODA_ALERT_LOOKBACK = 21600   # 6 hours
 IODA_EVENT_LOOKBACK = 86400   # 24 hours
-IODA_WATCHED_COUNTRIES = ["TW", "UA"]  # Always fetch signal levels for these
+IODA_WATCHED_COUNTRIES = ["TW", "UA", "IR"]  # Always fetch signal levels for these
 IODA_SIGNAL_DATASOURCES = ["merit-nt", "bgp"]  # Network telescope + BGP routing
 
 # Cyber-specific news feeds (fetched by CyberCollector, NOT NewsCollector)

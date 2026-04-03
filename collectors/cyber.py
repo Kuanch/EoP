@@ -168,10 +168,12 @@ class CyberCollector(BaseCollector):
         return alerts
 
     async def _fetch_watched_signals(self, client: httpx.AsyncClient) -> dict:
-        """Fetch real-time signal levels for watched countries (TW, UA).
+        """Fetch real-time signal levels for watched countries.
 
         Returns {country_code: {datasource: {values, pct_change, status}}}
         so the frontend can show continuous health even without declared outages.
+        Watched countries also appear in outage events/alerts — both sources
+        together give a more complete threat picture.
         """
         now = int(time.time())
         lookback = 6 * 3600  # 6 hours of data
