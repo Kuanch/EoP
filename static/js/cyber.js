@@ -13,15 +13,19 @@ const Cyber = {
     lastUpdated: null,
     _initialized: false,
 
+    _applyPayload(d) {
+        this.outages = d.outages || [];
+        this.cyberNews = d.cyber_news || [];
+        this.cves = d.cves || [];
+        this.stats = d.stats || this.stats;
+        this.correlations = d.correlations || [];
+        this.watchedSignals = d.watched_signals || {};
+        this.lastUpdated = d.last_updated || null;
+    },
+
     init() {
         WS.on('cyber', (d) => {
-            this.outages = d.outages || [];
-            this.cyberNews = d.cyber_news || [];
-            this.cves = d.cves || [];
-            this.stats = d.stats || this.stats;
-            this.correlations = d.correlations || [];
-            this.watchedSignals = d.watched_signals || {};
-            this.lastUpdated = d.last_updated || null;
+            this._applyPayload(d);
             this.render();
         });
         this._setupTabObserver();
@@ -39,7 +43,6 @@ const Cyber = {
         });
         observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
 
-        // Check if already active
         const tab = document.getElementById('tab-cyber');
         if (tab && tab.classList.contains('active')) {
             observer.disconnect();
@@ -75,14 +78,7 @@ const Cyber = {
         try {
             const resp = await fetch('/api/cyber');
             if (resp.ok) {
-                const d = await resp.json();
-                this.outages = d.outages || [];
-                this.cyberNews = d.cyber_news || [];
-                this.cves = d.cves || [];
-                this.stats = d.stats || this.stats;
-                this.correlations = d.correlations || [];
-                this.watchedSignals = d.watched_signals || {};
-                this.lastUpdated = d.last_updated || null;
+                this._applyPayload(await resp.json());
                 this.render();
             }
         } catch (e) { console.error('[Cyber] Initial load:', e); }
@@ -119,6 +115,11 @@ const Cyber = {
         if (!el || !this.lastUpdated) return;
         const ago = timeAgo(this.lastUpdated);
         el.textContent = `Updated ${ago}`;
+    },
+
+    _worstStatus(datasources) {
+        const statuses = Object.values(datasources).map(d => d.status);
+        return ['critical', 'degraded', 'warning', 'normal', 'unknown'].find(s => statuses.includes(s)) || 'unknown';
     },
 
     // --- Outage Map ---
@@ -223,10 +224,7 @@ const Cyber = {
         Object.entries(signals).forEach(([code, info]) => {
             if (!info.lat || !info.lon || !info.datasources || !Object.keys(info.datasources).length) return;
 
-            // Determine worst status across datasources
-            const statuses = Object.values(info.datasources).map(d => d.status);
-            const worstOrder = ['critical', 'degraded', 'warning', 'normal', 'unknown'];
-            const worst = worstOrder.find(s => statuses.includes(s)) || 'unknown';
+            const worst = this._worstStatus(info.datasources);
             const color = this._statusColor(worst);
 
             // Diamond-shaped marker (rotated square) — distinct from outage circles
@@ -272,9 +270,7 @@ const Cyber = {
         el.innerHTML = '<div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Signal Monitor — Watched Countries</div>' +
             Object.entries(signals).map(([code, info]) => {
                 if (!info.datasources || !Object.keys(info.datasources).length) return '';
-                const statuses = Object.values(info.datasources).map(d => d.status);
-                const worstOrder = ['critical', 'degraded', 'warning', 'normal', 'unknown'];
-                const worst = worstOrder.find(s => statuses.includes(s)) || 'unknown';
+                const worst = this._worstStatus(info.datasources);
                 const color = this._statusColor(worst);
                 const dsHtml = Object.entries(info.datasources).map(([ds, d]) => {
                     const c = this._statusColor(d.status);

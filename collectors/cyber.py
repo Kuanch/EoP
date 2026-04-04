@@ -24,7 +24,6 @@ from ws_manager import manager
 
 logger = logging.getLogger(__name__)
 
-# New payload cache (dict)
 cyber_cache: dict = {
     "outages": [],
     "cyber_news": [],
@@ -100,6 +99,13 @@ COUNTRY_GEO = {
     "ET": {"name": "Ethiopia",      "lat": 9.1,   "lon": 40.5,  "region": "East Africa"},
     "SD": {"name": "Sudan",         "lat": 12.9,  "lon": 30.2,  "region": "East Africa"},
 }
+
+
+def _unwrap_ioda_signal(data: list) -> dict | None:
+    """Unwrap IODA's nested response: [[{entity_dict}]] → dict, or None."""
+    inner = data[0] if isinstance(data, list) and data else data
+    entry = inner[0] if isinstance(inner, list) and inner else inner
+    return entry if isinstance(entry, dict) else None
 
 
 def _normalize_score(raw_score: float) -> int:
@@ -247,17 +253,14 @@ class CyberCollector(BaseCollector):
                     if not data:
                         continue
 
-                    # API returns nested list: [[{entity_dict}]]
-                    inner = data[0] if isinstance(data, list) and data else data
-                    entry = inner[0] if isinstance(inner, list) and inner else inner
-                    if not isinstance(entry, dict):
+                    entry = _unwrap_ioda_signal(data)
+                    if not entry:
                         logger.warning(f"[cyber] Signal {code}/{ds}: unexpected response shape")
                         continue
                     values = entry.get("values", [])
                     if not values or not any(v is not None for v in values):
                         continue
 
-                    # Filter out None values
                     valid = [v for v in values if v is not None]
                     if len(valid) < 2:
                         signals[code]["datasources"][ds] = {
@@ -358,7 +361,6 @@ class CyberCollector(BaseCollector):
                     })
             except Exception as e:
                 logger.error(f"[cyber] RSS {source}: {e}")
-        # Sort by publication time, newest first
         articles.sort(key=lambda a: a.get("published_ts") or 0, reverse=True)
         return articles[:50]
 
@@ -477,9 +479,8 @@ class CyberCollector(BaseCollector):
                     if not data:
                         continue
 
-                    inner = data[0] if isinstance(data, list) and data else data
-                    entry = inner[0] if isinstance(inner, list) and inner else inner
-                    if not isinstance(entry, dict):
+                    entry = _unwrap_ioda_signal(data)
+                    if not entry:
                         continue
 
                     values = entry.get("values", [])
@@ -555,7 +556,6 @@ class CyberCollector(BaseCollector):
 
         now_iso = datetime.utcnow().isoformat() + "Z"
 
-        # Update cache
         cyber_cache.update({
             "outages": outage_events,
             "cyber_news": cyber_news,
@@ -571,7 +571,6 @@ class CyberCollector(BaseCollector):
             "last_updated": now_iso,
         })
 
-        # Broadcast via WebSocket
         await manager.broadcast("cyber", cyber_cache)
 
         sig_count = sum(len(s.get("datasources", {})) for s in watched_signals.values())
