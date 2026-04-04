@@ -86,6 +86,8 @@ IODA_ALERT_LOOKBACK = 21600   # 6 hours
 IODA_EVENT_LOOKBACK = 86400   # 24 hours
 IODA_WATCHED_COUNTRIES = ["TW", "UA", "IR"]  # Always fetch signal levels for these
 IODA_SIGNAL_DATASOURCES = ["merit-nt", "bgp"]  # Network telescope + BGP routing
+IODA_SIGNAL_LOOKBACK = 86400       # 24 hours of signal data
+IODA_SIGNAL_MAX_POINTS = 48        # 30-min resolution over 24h
 
 # Cyber-specific news feeds (fetched by CyberCollector, NOT NewsCollector)
 CYBER_NEWS_FEEDS = {

@@ -2,10 +2,12 @@
 
 import calendar
 import hashlib
+import json
 import logging
 import math
+import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import feedparser
 import httpx
@@ -15,6 +17,7 @@ from config import (
     CYBER_POLL_INTERVAL, CISA_KEV_URL,
     IODA_API_BASE, IODA_ALERT_LOOKBACK, IODA_EVENT_LOOKBACK,
     IODA_WATCHED_COUNTRIES, IODA_SIGNAL_DATASOURCES,
+    IODA_SIGNAL_LOOKBACK, IODA_SIGNAL_MAX_POINTS,
     CYBER_NEWS_FEEDS, HTTP_TIMEOUT, HTTP_USER_AGENT,
 )
 from ws_manager import manager
@@ -35,6 +38,41 @@ cyber_cache: dict = {
 # Legacy compat: scoring.py expects a list of event dicts via main.py
 # This stays empty since we no longer produce IOC-style events.
 cyber_events_legacy: list[dict] = []
+
+SIGNAL_HISTORY_FILE = "data/signal_history.json"
+
+
+def _load_signal_history() -> dict:
+    """Load persistent signal daily averages from disk.
+
+    Structure: {country_code: {datasource: [{date: "YYYY-MM-DD", avg: float}, ...]}}
+    Keeps last 8 days (7-day window + today's partial).
+    """
+    if not os.path.exists(SIGNAL_HISTORY_FILE):
+        return {}
+    try:
+        with open(SIGNAL_HISTORY_FILE, "r") as f:
+            data = json.load(f)
+        # Prune entries older than 8 days
+        cutoff = (datetime.utcnow() - timedelta(days=8)).strftime("%Y-%m-%d")
+        for code in data:
+            for ds in data[code]:
+                data[code][ds] = [e for e in data[code][ds] if e["date"] >= cutoff]
+        return data
+    except Exception as e:
+        logger.error(f"[cyber] Failed to load signal history: {e}")
+        return {}
+
+
+def _save_signal_history(history: dict):
+    """Save signal daily averages to disk."""
+    try:
+        os.makedirs(os.path.dirname(SIGNAL_HISTORY_FILE), exist_ok=True)
+        with open(SIGNAL_HISTORY_FILE, "w") as f:
+            json.dump(history, f)
+    except Exception as e:
+        logger.error(f"[cyber] Failed to save signal history: {e}")
+
 
 # Country code → geo mapping (self-contained, not shared with config.py)
 COUNTRY_GEO = {
@@ -170,14 +208,15 @@ class CyberCollector(BaseCollector):
     async def _fetch_watched_signals(self, client: httpx.AsyncClient) -> dict:
         """Fetch real-time signal levels for watched countries.
 
-        Returns {country_code: {datasource: {values, pct_change, status}}}
-        so the frontend can show continuous health even without declared outages.
+        Returns {country_code: {datasource: {values, pct_change_24h, pct_change_7d, status}}}
+        Uses 24h window for trend visualization and 7-day MA for sustained anomaly detection.
         Watched countries also appear in outage events/alerts — both sources
         together give a more complete threat picture.
         """
         now = int(time.time())
-        lookback = 6 * 3600  # 6 hours of data
         signals: dict[str, dict] = {}
+        signal_history = _load_signal_history()
+        today = datetime.utcnow().strftime("%Y-%m-%d")
 
         for code in IODA_WATCHED_COUNTRIES:
             if code not in COUNTRY_GEO:
@@ -186,11 +225,19 @@ class CyberCollector(BaseCollector):
             signals[code] = {"name": geo["name"], "lat": geo["lat"], "lon": geo["lon"],
                              "region": geo["region"], "datasources": {}}
 
+            if code not in signal_history:
+                signal_history[code] = {}
+
             for ds in IODA_SIGNAL_DATASOURCES:
                 try:
                     resp = await client.get(
                         f"{IODA_API_BASE}/signals/raw/country/{code}",
-                        params={"datasource": ds, "from": now - lookback, "until": now, "maxPoints": 12},
+                        params={
+                            "datasource": ds,
+                            "from": now - IODA_SIGNAL_LOOKBACK,
+                            "until": now,
+                            "maxPoints": IODA_SIGNAL_MAX_POINTS,
+                        },
                     )
                     if resp.status_code != 200:
                         continue
@@ -213,40 +260,64 @@ class CyberCollector(BaseCollector):
                     if len(valid) < 2:
                         signals[code]["datasources"][ds] = {
                             "current": valid[-1] if valid else 0,
-                            "pct_change": 0,
+                            "pct_change_24h": 0,
+                            "pct_change_7d": 0,
                             "status": "unknown",
                             "values": values,
                         }
                         continue
 
                     current = valid[-1]
-                    baseline = sum(valid[:-1]) / len(valid[:-1])
+                    baseline_24h = sum(valid[:-1]) / len(valid[:-1])
 
-                    if baseline == 0:
-                        pct_change = 0
+                    if baseline_24h == 0:
+                        pct_24h = 0.0
                     else:
-                        pct_change = round((current - baseline) / baseline * 100, 1)
+                        pct_24h = round((current - baseline_24h) / baseline_24h * 100, 1)
 
-                    # Classify health
-                    if pct_change < -30:
+                    # Update today's daily average in history
+                    daily_avg = sum(valid) / len(valid)
+                    if ds not in signal_history[code]:
+                        signal_history[code][ds] = []
+                    history_entries = signal_history[code][ds]
+                    # Replace today's entry if exists, otherwise append
+                    history_entries = [e for e in history_entries if e["date"] != today]
+                    history_entries.append({"date": today, "avg": round(daily_avg, 2)})
+                    signal_history[code][ds] = history_entries
+
+                    # Compute 7-day MA (exclude today's partial)
+                    past_entries = [e for e in history_entries if e["date"] != today]
+                    if past_entries:
+                        baseline_7d = sum(e["avg"] for e in past_entries) / len(past_entries)
+                        pct_7d = round((current - baseline_7d) / baseline_7d * 100, 1) if baseline_7d else 0.0
+                    else:
+                        baseline_7d = baseline_24h  # Bootstrap: no history yet
+                        pct_7d = pct_24h
+
+                    # Classify health — use worse of both windows
+                    worst_pct = min(pct_24h, pct_7d)
+                    if worst_pct < -30:
                         status = "critical"
-                    elif pct_change < -15:
+                    elif worst_pct < -15:
                         status = "degraded"
-                    elif pct_change < -5:
+                    elif worst_pct < -5:
                         status = "warning"
                     else:
                         status = "normal"
 
                     signals[code]["datasources"][ds] = {
                         "current": round(current, 1),
-                        "baseline": round(baseline, 1),
-                        "pct_change": pct_change,
+                        "baseline_24h": round(baseline_24h, 1),
+                        "baseline_7d": round(baseline_7d, 1),
+                        "pct_change_24h": pct_24h,
+                        "pct_change_7d": pct_7d,
                         "status": status,
                         "values": [round(v, 1) if v is not None else None for v in values],
                     }
                 except Exception as e:
                     logger.error(f"[cyber] Signal {code}/{ds}: {e}")
 
+        _save_signal_history(signal_history)
         return signals
 
     async def _fetch_cyber_news(self, client: httpx.AsyncClient) -> list[dict]:
@@ -372,11 +443,68 @@ class CyberCollector(BaseCollector):
 
         return correlations
 
+    async def _backfill_signal_history(self, client: httpx.AsyncClient):
+        """One-time backfill: fetch 7 days of daily signal averages for watched countries."""
+        history = _load_signal_history()
+        if any(history.get(c, {}).get(ds) for c in IODA_WATCHED_COUNTRIES for ds in IODA_SIGNAL_DATASOURCES):
+            return  # Already have some history, skip backfill
+
+        logger.info("[cyber] Backfilling 7-day signal history...")
+        now = int(time.time())
+
+        for code in IODA_WATCHED_COUNTRIES:
+            if code not in COUNTRY_GEO:
+                continue
+            if code not in history:
+                history[code] = {}
+
+            for ds in IODA_SIGNAL_DATASOURCES:
+                try:
+                    resp = await client.get(
+                        f"{IODA_API_BASE}/signals/raw/country/{code}",
+                        params={
+                            "datasource": ds,
+                            "from": now - 7 * 86400,
+                            "until": now,
+                            "maxPoints": 7,
+                        },
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json().get("data", [])
+                    if not data:
+                        continue
+
+                    inner = data[0] if isinstance(data, list) and data else data
+                    entry = inner[0] if isinstance(inner, list) and inner else inner
+                    if not isinstance(entry, dict):
+                        continue
+
+                    values = entry.get("values", [])
+                    valid = [v for v in values if v is not None]
+                    if not valid:
+                        continue
+
+                    entries = []
+                    for i, val in enumerate(valid):
+                        day = datetime.utcfromtimestamp(now - (len(valid) - i) * 86400).strftime("%Y-%m-%d")
+                        entries.append({"date": day, "avg": round(val, 2)})
+
+                    history[code][ds] = entries
+                    logger.info(f"[cyber] Backfilled {code}/{ds}: {len(entries)} days")
+                except Exception as e:
+                    logger.error(f"[cyber] Backfill {code}/{ds}: {e}")
+
+        _save_signal_history(history)
+
     async def collect(self):
         async with httpx.AsyncClient(
             timeout=HTTP_TIMEOUT,
             headers={"User-Agent": HTTP_USER_AGENT},
         ) as client:
+            # One-time backfill of 7-day history on first run
+            await self._backfill_signal_history(client)
+
             # Fetch all sources
             outage_events = await self._fetch_ioda_events(client)
             outage_alerts = await self._fetch_ioda_alerts(client)

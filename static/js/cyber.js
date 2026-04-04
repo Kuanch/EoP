@@ -243,13 +243,14 @@ const Cyber = {
             let tip = `<b>${this.esc(info.name)}</b> — Signal Monitor<br>`;
             Object.entries(info.datasources).forEach(([ds, d]) => {
                 const dsColor = this._statusColor(d.status);
-                const arrow = d.pct_change > 0 ? '▲' : d.pct_change < 0 ? '▼' : '—';
+                const arrow24 = d.pct_change_24h > 0 ? '▲' : d.pct_change_24h < 0 ? '▼' : '—';
+                const arrow7d = d.pct_change_7d > 0 ? '▲' : d.pct_change_7d < 0 ? '▼' : '—';
                 const spark = this._miniSparkline(d.values, dsColor, 60, 18);
                 tip += `<div style="margin-top:4px;">` +
                     `<span style="color:${dsColor};font-weight:600;">${this.esc(this._datasourceLabel(ds))}</span> ` +
                     `${spark} ` +
-                    `<span style="color:${dsColor};">${arrow} ${d.pct_change > 0 ? '+' : ''}${d.pct_change}%</span>` +
-                    `<span style="color:var(--text-secondary);font-size:11px;"> (${d.current})</span>` +
+                    `<span style="color:${dsColor};">${arrow24} ${d.pct_change_24h > 0 ? '+' : ''}${d.pct_change_24h}% 24h</span>` +
+                    `<span style="color:var(--text-secondary);font-size:11px;"> | ${arrow7d} ${d.pct_change_7d > 0 ? '+' : ''}${d.pct_change_7d}% 7d</span>` +
                     `</div>`;
             });
             marker.bindTooltip(tip, { className: 'dark-tooltip', maxWidth: 280 });
@@ -277,13 +278,16 @@ const Cyber = {
                 const color = this._statusColor(worst);
                 const dsHtml = Object.entries(info.datasources).map(([ds, d]) => {
                     const c = this._statusColor(d.status);
-                    const arrow = d.pct_change > 0 ? '▲' : d.pct_change < 0 ? '▼' : '—';
+                    const arrow24 = d.pct_change_24h > 0 ? '▲' : d.pct_change_24h < 0 ? '▼' : '—';
+                    const arrow7d = d.pct_change_7d > 0 ? '▲' : d.pct_change_7d < 0 ? '▼' : '—';
                     const spark = this._miniSparkline(d.values, c, 80, 20);
                     return `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">` +
                         `<span style="font-size:12px;color:${c};font-weight:600;min-width:110px;">${this.esc(this._datasourceLabel(ds))}</span>` +
                         `${spark}` +
-                        `<span style="font-size:12px;color:${c};">${arrow} ${d.pct_change > 0 ? '+' : ''}${d.pct_change}%</span>` +
-                        `<span style="font-size:11px;color:var(--text-secondary);">${d.current}</span>` +
+                        `<span style="font-size:12px;color:${c};">${arrow24} ${d.pct_change_24h > 0 ? '+' : ''}${d.pct_change_24h}%</span>` +
+                        `<span style="font-size:11px;color:var(--text-secondary);">24h</span>` +
+                        `<span style="font-size:12px;color:${c};margin-left:4px;">${arrow7d} ${d.pct_change_7d > 0 ? '+' : ''}${d.pct_change_7d}%</span>` +
+                        `<span style="font-size:11px;color:var(--text-secondary);">7d</span>` +
                         `</div>`;
                 }).join('');
                 return `<div class="card" style="padding:10px 14px;margin-bottom:6px;border-left:3px solid ${color};">` +
