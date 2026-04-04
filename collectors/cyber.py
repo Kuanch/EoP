@@ -53,8 +53,8 @@ def _load_signal_history() -> dict:
     try:
         with open(SIGNAL_HISTORY_FILE, "r") as f:
             data = json.load(f)
-        # Prune entries older than 8 days
-        cutoff = (datetime.utcnow() - timedelta(days=8)).strftime("%Y-%m-%d")
+        # Prune entries older than 7 days (keep 7 prior days + today)
+        cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
         for code in data:
             for ds in data[code]:
                 data[code][ds] = [e for e in data[code][ds] if e["date"] >= cutoff]
@@ -65,11 +65,13 @@ def _load_signal_history() -> dict:
 
 
 def _save_signal_history(history: dict):
-    """Save signal daily averages to disk."""
+    """Save signal daily averages to disk (atomic write)."""
     try:
         os.makedirs(os.path.dirname(SIGNAL_HISTORY_FILE), exist_ok=True)
-        with open(SIGNAL_HISTORY_FILE, "w") as f:
+        tmp = f"{SIGNAL_HISTORY_FILE}.tmp"
+        with open(tmp, "w") as f:
             json.dump(history, f)
+        os.replace(tmp, SIGNAL_HISTORY_FILE)
     except Exception as e:
         logger.error(f"[cyber] Failed to save signal history: {e}")
 
@@ -444,13 +446,10 @@ class CyberCollector(BaseCollector):
         return correlations
 
     async def _backfill_signal_history(self, client: httpx.AsyncClient):
-        """One-time backfill: fetch 7 days of daily signal averages for watched countries."""
+        """Backfill missing 7-day signal history for watched countries."""
         history = _load_signal_history()
-        if any(history.get(c, {}).get(ds) for c in IODA_WATCHED_COUNTRIES for ds in IODA_SIGNAL_DATASOURCES):
-            return  # Already have some history, skip backfill
-
-        logger.info("[cyber] Backfilling 7-day signal history...")
         now = int(time.time())
+        needed = False
 
         for code in IODA_WATCHED_COUNTRIES:
             if code not in COUNTRY_GEO:
@@ -459,6 +458,9 @@ class CyberCollector(BaseCollector):
                 history[code] = {}
 
             for ds in IODA_SIGNAL_DATASOURCES:
+                if history.get(code, {}).get(ds):
+                    continue  # Already have history for this series
+                needed = True
                 try:
                     resp = await client.get(
                         f"{IODA_API_BASE}/signals/raw/country/{code}",
@@ -481,13 +483,15 @@ class CyberCollector(BaseCollector):
                         continue
 
                     values = entry.get("values", [])
-                    valid = [v for v in values if v is not None]
-                    if not valid:
+                    if not any(v is not None for v in values):
                         continue
 
+                    # Iterate with positional index to preserve date alignment
                     entries = []
-                    for i, val in enumerate(valid):
-                        day = datetime.utcfromtimestamp(now - (len(valid) - i) * 86400).strftime("%Y-%m-%d")
+                    for i, val in enumerate(values):
+                        if val is None:
+                            continue
+                        day = datetime.utcfromtimestamp(now - (len(values) - i) * 86400).strftime("%Y-%m-%d")
                         entries.append({"date": day, "avg": round(val, 2)})
 
                     history[code][ds] = entries
@@ -495,7 +499,8 @@ class CyberCollector(BaseCollector):
                 except Exception as e:
                     logger.error(f"[cyber] Backfill {code}/{ds}: {e}")
 
-        _save_signal_history(history)
+        if needed:
+            _save_signal_history(history)
 
     async def collect(self):
         async with httpx.AsyncClient(
