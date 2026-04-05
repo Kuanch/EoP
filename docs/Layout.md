@@ -10,6 +10,7 @@ EoP/
 ├── ws_manager.py               # WebSocket connection manager (broadcast to all clients)
 ├── scoring.py                  # Regional threat scoring algorithm (0-100)
 ├── threat_engine.py            # Hybrid threat detection: keyword rules + Claude Haiku LLM
+├── cyber_escalation.py         # Cyber escalation pipeline (IODA signal correlation)
 ├── notifier.py                 # Push notifications via ntfy
 ├── manage_users.py             # CLI user management (create, delete, password, etc.)
 ├── threat_rules.json           # Threat config: keyword weights, thresholds, LLM prompt
@@ -55,12 +56,14 @@ EoP/
 │
 ├── docs/                       #   Documentation
 │   ├── Layout.md               #   This file
-│   └── API.md                  #   REST & WebSocket API reference
+│   ├── API.md                  #   REST & WebSocket API reference
+│   └── plans/                  #   Implementation plans and design docs
 │
-├── Dockerfile                  #   Docker image definition (non-root)
-├── docker-compose.yml          #   App container
+├── CLAUDE.md                   #   Claude Code project context (deployment, architecture)
+├── Dockerfile                  #   Docker image definition (Python 3.12, non-root appuser)
+├── docker-compose.yml          #   App + Cloudflare tunnel containers
 ├── docker-compose.ntfy.yml     #   ntfy push notification server
-├── cloudflared.service         #   Cloudflare Tunnel systemd unit
+├── cloudflared.service         #   Cloudflare Tunnel systemd unit (legacy, now Docker-based)
 └── watchdog.sh                 #   Process watchdog script
 ```
 

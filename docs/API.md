@@ -1,5 +1,7 @@
 # API Reference
 
+**Base URL**: `https://kuanchlee.com` (Cloudflare Tunnel) or `http://192.168.0.148:8000` (LAN)
+
 All API endpoints require authentication via `session_token` cookie unless noted otherwise. Rate limits are per-IP.
 
 ## HTML Routes

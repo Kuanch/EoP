@@ -24,12 +24,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY main.py database.py manage_users.py ws_manager.py config.py scoring.py ./
+COPY threat_engine.py notifier.py cyber_escalation.py ./
+COPY threat_rules.json ./
 COPY collectors/ ./collectors/
 COPY templates/ ./templates/
 COPY static/ ./static/
 
-# Create non-root user and data directory, set permissions
-RUN mkdir -p /app/data && \
+# Create non-root user and data/logs directories, set permissions
+RUN mkdir -p /app/data /app/logs && \
     useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app
 USER appuser

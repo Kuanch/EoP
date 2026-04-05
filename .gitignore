@@ -42,6 +42,8 @@ Thumbs.db
 .env.local
 key.txt
 opensky_credentials.json
+eop-tpot*.json
+*.Zone.Identifier
 
 # Logs
 *.log
