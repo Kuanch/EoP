@@ -352,15 +352,16 @@ const MapView = {
     },
 
     _countryColor(country) {
-        if (!country) return '#e94560';
+        if (!country) return '#888888';  // Unknown → grey
         const c = country.toLowerCase();
+        if (c === 'unknown') return '#888888';
+        if (c.includes('taiwan') || c.includes('republic of china')) return '#44ff88';
         if (c.includes('china') || c === 'hong kong') return '#ff4444';
         if (c.includes('russia')) return '#ff6600';
         if (c.includes('united states')) return '#4488ff';
         if (c.includes('japan')) return '#ffffff';
         if (c.includes('korea')) return '#44ddff';
-        if (c.includes('taiwan') || c.includes('republic of china')) return '#44ff88';
-        return '#e94560';
+        return '#c0a0ff';  // Other known countries → light purple
     },
 
     // --- Ships ---
@@ -373,7 +374,7 @@ const MapView = {
         const isSpecial = vtype === 35 || vname === 'military' ||
                           vtype === 55 || vname === 'law enforcement' ||
                           vtype === 51 || vname === 'sar';
-        const isUnknown = !s.country || s.country === 'Unknown';
+        const isUnknown = !s.country || s.country.toLowerCase() === 'unknown';
 
         let shape;
         if (isSpecial) {

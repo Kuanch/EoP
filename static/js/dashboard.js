@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tabId === 'map' && MapView.map) {
             setTimeout(() => MapView.map.invalidateSize(), 50);
         }
+        if (tabId === 'cyber' && typeof Cyber !== 'undefined' && Cyber.map) {
+            setTimeout(() => Cyber.map.invalidateSize(), 50);
+        }
         if (tabId === 'markets' && typeof Markets !== 'undefined') {
             setTimeout(() => Markets.render(), 50);
         }

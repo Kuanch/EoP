@@ -442,8 +442,8 @@ async def api_military(request: Request):
 async def api_cyber(request: Request):
     if not _require_auth(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    from collectors.cyber import cyber_cache, stats_cache
-    return JSONResponse({"events": cyber_cache, "stats": stats_cache})
+    from collectors.cyber import cyber_cache
+    return JSONResponse(cyber_cache)
 
 
 @app.get("/api/polymarket")
@@ -482,9 +482,9 @@ async def api_threats(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     from collectors.news import articles_cache
     from collectors.military import assets_cache
-    from collectors.cyber import cyber_cache
+    from collectors.cyber import cyber_events_legacy
     from scoring import compute_region_scores
-    scores = compute_region_scores(articles_cache, assets_cache, cyber_cache)
+    scores = compute_region_scores(articles_cache, assets_cache, cyber_events_legacy)
     return JSONResponse(scores)
 
 
@@ -584,13 +584,11 @@ async def start_collectors():
 
     news = NewsCollector()
     news.set_db(SessionLocal)
-    cyber = CyberCollector()
-    cyber.set_db(SessionLocal)
 
     asyncio.create_task(news.run())
     asyncio.create_task(MarketsCollector().run())
     asyncio.create_task(MilitaryCollector().run())
-    asyncio.create_task(cyber.run())
+    asyncio.create_task(CyberCollector().run())
     asyncio.create_task(PizzIntCollector().run())
     asyncio.create_task(PolymarketCollector().run())
     asyncio.create_task(ShipCollector().run())

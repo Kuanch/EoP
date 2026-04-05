@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eye of Providence</title>
-    <link rel="stylesheet" href="/static/css/dashboard.css?v=6">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=7">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>.dark-tooltip { background: #16213e; color: #e0e0e0; border: 1px solid #2a2a4a; } .dark-tooltip .leaflet-tooltip-arrow { display: none; }</style>
 </head>
@@ -22,11 +22,11 @@
     </nav>
 
     <div class="tab-bar">
-        <button class="tab-btn active" data-tab="news">News <span class="health-dot" data-source="news" title="News"></span></button>
-        <button class="tab-btn" data-tab="markets">Markets <span class="health-dot" data-source="markets" title="Markets"></span> <span class="health-dot" data-source="polymarket" title="Polymarket"></span></button>
-        <button class="tab-btn" data-tab="military">Military <span class="health-dot" data-source="military" title="Military"></span></button>
-        <button class="tab-btn" data-tab="cyber">Cyber <span class="health-dot" data-source="cyber" title="Cyber"></span></button>
-        <button class="tab-btn" data-tab="map">Map <span class="health-dot" data-source="ships" title="Ships"></span> <span class="health-dot" data-source="pizzint" title="PizzINT"></span></button>
+        <button class="tab-btn active" data-tab="news">News <span class="health-dot" data-tab-health="news" data-sources="news" title="News"></span></button>
+        <button class="tab-btn" data-tab="markets">Markets <span class="health-dot" data-tab-health="markets" data-sources="markets,polymarket" title="Markets"></span></button>
+        <button class="tab-btn" data-tab="military">Military <span class="health-dot" data-tab-health="military" data-sources="military" title="Military"></span></button>
+        <button class="tab-btn" data-tab="cyber">Cyber <span class="health-dot" data-tab-health="cyber" data-sources="cyber" title="Cyber"></span></button>
+        <button class="tab-btn" data-tab="map">Map <span class="health-dot" data-tab-health="map" data-sources="ships,pizzint" title="Map"></span></button>
         <button class="tab-btn" data-tab="threats">Threats</button>
     </div>
 
@@ -34,13 +34,13 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-    <script src="/static/js/dashboard.js?v=2"></script>
-    <script src="/static/js/ws.js?v=2"></script>
+    <script src="/static/js/dashboard.js?v=3"></script>
+    <script src="/static/js/ws.js?v=3"></script>
     <script src="/static/js/news.js?v=2"></script>
     <script src="/static/js/markets.js?v=8"></script>
     <script src="/static/js/military.js?v=2"></script>
-    <script src="/static/js/cyber.js?v=2"></script>
-    <script src="/static/js/map.js?v=10"></script>
+    <script src="/static/js/cyber.js?v=6"></script>
+    <script src="/static/js/map.js?v=11"></script>
     <script src="/static/js/threats.js?v=2"></script>
 </body>
 </html>

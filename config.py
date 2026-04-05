@@ -6,7 +6,7 @@ import os
 NEWS_POLL_INTERVAL = 300       # 5 minutes
 MARKETS_POLL_INTERVAL = 60     # 1 minute
 MILITARY_POLL_INTERVAL = 30    # 30 seconds
-CYBER_POLL_INTERVAL = 1800     # 30 minutes
+CYBER_POLL_INTERVAL = 600      # 10 minutes (IODA updates every ~5 min)
 SHIPS_BROADCAST_INTERVAL = 5   # 5 seconds (batch AIS updates)
 
 # API Keys (from environment)
@@ -23,6 +23,9 @@ NEWS_FEEDS = {
     "CNA World": "https://feeds.feedburner.com/rsscna/intworld",
     "CNA Mainland": "https://feeds.feedburner.com/rsscna/mainland",
     "CBS World": "https://www.cbsnews.com/latest/rss/world",
+    "Yonhap": "https://en.yna.co.kr/RSS/news.xml",
+    "The War Zone": "https://www.twz.com/feed",
+    "Breaking Defense": "https://breakingdefense.com/full-rss-feed/?v=2",
 }
 
 # Market symbols
@@ -76,10 +79,22 @@ MONITORED_REGIONS = {
 
 # Cyber sources
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.json"
-OTX_PULSE_URL = "https://otx.alienvault.com/api/v1/pulses/subscribed"
-URLHAUS_CSV_URL = "https://urlhaus.abuse.ch/downloads/csv_recent/"
-C2INTEL_CSV_URL = "https://raw.githubusercontent.com/drb-ra/C2IntelFeeds/master/feeds/IPC2s-30day.csv"
+
+# IODA Internet Outage Detection
+IODA_API_BASE = "https://api.ioda.inetintel.cc.gatech.edu/v2"
+IODA_ALERT_LOOKBACK = 21600   # 6 hours
+IODA_EVENT_LOOKBACK = 86400   # 24 hours
+IODA_WATCHED_COUNTRIES = ["TW", "UA", "IR"]  # Always fetch signal levels for these
+IODA_SIGNAL_DATASOURCES = ["merit-nt", "bgp"]  # Network telescope + BGP routing
+IODA_SIGNAL_LOOKBACK = 86400       # 24 hours of signal data
+IODA_SIGNAL_MAX_POINTS = 48        # 30-min resolution over 24h
+
+# Cyber-specific news feeds (fetched by CyberCollector, NOT NewsCollector)
+CYBER_NEWS_FEEDS = {
+    "The Record": "https://therecord.media/feed",
+    "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
+    "CyberScoop": "https://cyberscoop.com/feed/",
+}
 
 # Geo-tagging keyword → region mapping
 GEO_KEYWORDS = {

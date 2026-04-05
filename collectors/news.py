@@ -49,13 +49,13 @@ class NewsCollector(BaseCollector):
                     if resp.status_code != 200:
                         logger.warning(f"[news] {source} returned {resp.status_code}")
                         continue
-                    feed = feedparser.parse(resp.text)
+                    feed = feedparser.parse(resp.content)
                     for entry in feed.entries[:20]:
-                        # Skip old articles (>6 hours)
+                        # Skip old articles (>24 hours)
                         pub_parsed = entry.get("published_parsed")
                         if pub_parsed:
                             pub_ts = calendar.timegm(pub_parsed)
-                            if time.time() - pub_ts > 6 * 3600:
+                            if time.time() - pub_ts > 24 * 3600:
                                 continue
 
                         url_hash = hashlib.sha256(entry.get("link", "").encode()).hexdigest()[:16]
@@ -84,6 +84,7 @@ class NewsCollector(BaseCollector):
                             "source": source,
                             "url": link,
                             "published": published,
+                            "published_ts": pub_ts if pub_parsed else None,
                             "geo_region": region,
                             "geo_lat": lat,
                             "geo_lon": lon,
@@ -135,7 +136,8 @@ class NewsCollector(BaseCollector):
             import threat_engine
             for a in new_articles:
                 try:
-                    await threat_engine.assess("news", a["title"], a.get("summary", ""))
+                    await threat_engine.assess("news", a["title"], a.get("summary", ""),
+                                               extra={"published_ts": a.get("published_ts"), "feed_name": a.get("source")})
                 except Exception as e:
                     logger.error(f"[news] Threat assess error: {e}")
 

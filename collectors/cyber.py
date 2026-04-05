@@ -1,323 +1,587 @@
-"""Cyber threat intelligence collector: CISA KEV, Abuse.ch, OTX, URLhaus, C2Intel."""
+"""Cyber intelligence collector: IODA outage detection, cyber news RSS, CISA KEV."""
 
-import csv
-import io
+import calendar
+import hashlib
+import json
 import logging
-from datetime import datetime
+import math
+import os
+import time
+from datetime import datetime, timedelta
 
+import feedparser
 import httpx
 
 from collectors.base import BaseCollector
-from cyber_escalation import classify_event
 from config import (
-    CYBER_POLL_INTERVAL, CISA_KEV_URL, FEODO_URL,
-    OTX_PULSE_URL, OTX_API_KEY, URLHAUS_CSV_URL, C2INTEL_CSV_URL,
-    HTTP_TIMEOUT, HTTP_USER_AGENT,
+    CYBER_POLL_INTERVAL, CISA_KEV_URL,
+    IODA_API_BASE, IODA_ALERT_LOOKBACK, IODA_EVENT_LOOKBACK,
+    IODA_WATCHED_COUNTRIES, IODA_SIGNAL_DATASOURCES,
+    IODA_SIGNAL_LOOKBACK, IODA_SIGNAL_MAX_POINTS,
+    CYBER_NEWS_FEEDS, HTTP_TIMEOUT, HTTP_USER_AGENT,
 )
 from ws_manager import manager
 
 logger = logging.getLogger(__name__)
 
-cyber_cache: list[dict] = []
-stats_cache: dict = {
-    "total_iocs": 0,
-    "active_campaigns": 0,
-    "new_cves": 0,
-    "threat_level": "Low",
-    "source_counts": {},
-    "escalation_summary": {},
+cyber_cache: dict = {
+    "outages": [],
+    "cyber_news": [],
+    "cves": [],
+    "stats": {"active_outages": 0, "countries_affected": 0, "new_cves": 0},
+    "correlations": [],
+    "watched_signals": {},
+    "last_updated": None,
 }
+
+# Legacy compat: scoring.py expects a list of event dicts via main.py
+# This stays empty since we no longer produce IOC-style events.
+cyber_events_legacy: list[dict] = []
+
+SIGNAL_HISTORY_FILE = "data/signal_history.json"
+
+
+def _load_signal_history() -> dict:
+    """Load persistent signal daily averages from disk.
+
+    Structure: {country_code: {datasource: [{date: "YYYY-MM-DD", avg: float}, ...]}}
+    Keeps last 8 days (7-day window + today's partial).
+    """
+    if not os.path.exists(SIGNAL_HISTORY_FILE):
+        return {}
+    try:
+        with open(SIGNAL_HISTORY_FILE, "r") as f:
+            data = json.load(f)
+        # Prune entries older than 7 days (keep 7 prior days + today)
+        cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+        for code in data:
+            for ds in data[code]:
+                data[code][ds] = [e for e in data[code][ds] if e["date"] >= cutoff]
+        return data
+    except Exception as e:
+        logger.error(f"[cyber] Failed to load signal history: {e}")
+        return {}
+
+
+def _save_signal_history(history: dict):
+    """Save signal daily averages to disk (atomic write)."""
+    try:
+        os.makedirs(os.path.dirname(SIGNAL_HISTORY_FILE), exist_ok=True)
+        tmp = f"{SIGNAL_HISTORY_FILE}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(history, f)
+        os.replace(tmp, SIGNAL_HISTORY_FILE)
+    except Exception as e:
+        logger.error(f"[cyber] Failed to save signal history: {e}")
+
+
+# Country code → geo mapping (self-contained, not shared with config.py)
+COUNTRY_GEO = {
+    "TW": {"name": "Taiwan",        "lat": 24.0,  "lon": 121.0, "region": "Taiwan Strait"},
+    "CN": {"name": "China",         "lat": 35.0,  "lon": 105.0, "region": "East Asia"},
+    "UA": {"name": "Ukraine",       "lat": 49.0,  "lon": 32.0,  "region": "East Ukraine"},
+    "RU": {"name": "Russia",        "lat": 55.75, "lon": 37.6,  "region": "Russia"},
+    "IR": {"name": "Iran",          "lat": 32.0,  "lon": 53.0,  "region": "Middle East"},
+    "IQ": {"name": "Iraq",          "lat": 33.3,  "lon": 44.4,  "region": "Middle East"},
+    "SY": {"name": "Syria",         "lat": 35.0,  "lon": 38.0,  "region": "Middle East"},
+    "IL": {"name": "Israel",        "lat": 31.0,  "lon": 35.0,  "region": "Middle East"},
+    "PS": {"name": "Palestine",     "lat": 31.9,  "lon": 35.2,  "region": "Middle East"},
+    "LB": {"name": "Lebanon",       "lat": 33.9,  "lon": 35.5,  "region": "Middle East"},
+    "YE": {"name": "Yemen",         "lat": 15.5,  "lon": 48.5,  "region": "Middle East"},
+    "KP": {"name": "North Korea",   "lat": 40.0,  "lon": 127.0, "region": "Korean Peninsula"},
+    "KR": {"name": "South Korea",   "lat": 37.5,  "lon": 127.0, "region": "Korean Peninsula"},
+    "JP": {"name": "Japan",         "lat": 36.0,  "lon": 138.0, "region": "East Asia"},
+    "PH": {"name": "Philippines",   "lat": 12.9,  "lon": 121.8, "region": "South China Sea"},
+    "MM": {"name": "Myanmar",       "lat": 19.8,  "lon": 96.2,  "region": "Southeast Asia"},
+    "PK": {"name": "Pakistan",      "lat": 30.4,  "lon": 69.3,  "region": "South Asia"},
+    "IN": {"name": "India",         "lat": 20.6,  "lon": 79.0,  "region": "South Asia"},
+    "SA": {"name": "Saudi Arabia",  "lat": 23.9,  "lon": 45.1,  "region": "Middle East"},
+    "ET": {"name": "Ethiopia",      "lat": 9.1,   "lon": 40.5,  "region": "East Africa"},
+    "SD": {"name": "Sudan",         "lat": 12.9,  "lon": 30.2,  "region": "East Africa"},
+}
+
+
+def _unwrap_ioda_signal(data: list) -> dict | None:
+    """Unwrap IODA's nested response: [[{entity_dict}]] → dict, or None."""
+    inner = data[0] if isinstance(data, list) and data else data
+    entry = inner[0] if isinstance(inner, list) and inner else inner
+    return entry if isinstance(entry, dict) else None
+
+
+def _normalize_score(raw_score: float) -> int:
+    """Map IODA's raw score (varies ~1k to ~2M) to 1-10 severity using log scale."""
+    if raw_score <= 0:
+        return 1
+    log_val = math.log10(max(raw_score, 1))
+    # Empirical: scores range from ~10^3 (minor) to ~10^6 (massive)
+    # Map log10(1000)=3 → 1, log10(1000000)=6 → 10
+    severity = int((log_val - 3) * 3) + 1
+    return max(1, min(severity, 10))
 
 
 class CyberCollector(BaseCollector):
     def __init__(self):
         super().__init__("cyber", CYBER_POLL_INTERVAL)
-        self.db_session_factory = None
+        self._seen_urls: set[str] = set()
 
-    def set_db(self, session_factory):
-        self.db_session_factory = session_factory
-
-    async def _fetch_urlhaus(self, client: httpx.AsyncClient) -> tuple[list[dict], int]:
-        resp = await client.get(URLHAUS_CSV_URL)
-        resp.raise_for_status()
-
-        rows: list[str] = []
-        for line in resp.text.splitlines():
-            if not line.strip():
-                continue
-            if line.startswith("# id,"):
-                rows.append(line.lstrip("# ").strip())
-                continue
-            if line.startswith("#"):
-                continue
-            rows.append(line)
-
-        if not rows:
-            return [], 0
-
-        reader = csv.DictReader(io.StringIO("\n".join(rows)))
-        events = []
-        online_count = 0
-
-        for row in reader:
-            if row.get("url_status") != "online":
-                continue
-            online_count += 1
-            if len(events) >= 20:
-                continue
-
-            tags = row.get("tags", "").strip()
-            threat = row.get("threat", "").replace("_", " ").strip() or "malware"
-            description = threat.title()
-            if tags:
-                description = f"{description} | Tags: {tags[:120]}"
-
-            events.append({
-                "type": "malware_url",
-                "title": row.get("url", "Unknown URL"),
-                "severity": "High",
-                "source": "URLhaus",
-                "description": description,
-                "ioc_count": 1,
-                "timestamp": row.get("dateadded", ""),
-            })
-
-        return events, online_count
-
-    async def _fetch_c2intel(self, client: httpx.AsyncClient) -> tuple[list[dict], int]:
-        resp = await client.get(C2INTEL_CSV_URL)
-        resp.raise_for_status()
-
-        rows = []
-        for line in resp.text.splitlines():
-            if not line.strip():
-                continue
-            if line.startswith("#ip,"):
-                rows.append(line.lstrip("# ").strip())
-                continue
-            rows.append(line)
-
-        reader = csv.DictReader(io.StringIO("\n".join(rows)))
-        events = []
-        row_count = 0
-
-        for row in reader:
-            ip = (row.get("ip") or "").strip()
-            ioc = (row.get("ioc") or "").strip()
-            if not ip:
-                continue
-            row_count += 1
-            if len(events) >= 20:
-                continue
-            events.append({
-                "type": "c2_community",
-                "title": f"C2 Indicator: {ip}",
-                "severity": "Medium",
-                "source": "C2IntelFeeds",
-                "description": ioc or "Community-reported C2 indicator",
-                "ioc_count": 1,
-                "timestamp": datetime.utcnow().isoformat(),
-            })
-
-        return events, row_count
-
-    async def collect(self):
-        events = []
-        total_iocs = 0
-        new_cves = 0
-        active_campaigns = 0
-        source_counts = {
-            "cisa_kev": 0,
-            "feodo": 0,
-            "otx": 0,
-            "urlhaus": 0,
-            "c2intel": 0,
+    async def _fetch_ioda_events(self, client: httpx.AsyncClient) -> list[dict]:
+        """Fetch confirmed outage events from IODA for monitored countries."""
+        now = int(time.time())
+        params = {
+            "entityType": "country",
+            "from": now - IODA_EVENT_LOOKBACK,
+            "until": now,
         }
-        escalation_summary = {"background": 0, "elevated": 0, "strategic": 0, "war_signals": 0}
+        try:
+            resp = await client.get(f"{IODA_API_BASE}/outages/events", params=params)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error(f"[cyber] IODA events: {e}")
+            return []
 
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": HTTP_USER_AGENT}) as client:
-            # CISA KEV
-            try:
-                resp = await client.get(CISA_KEV_URL)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    vulns = data.get("vulnerabilities", [])
-                    today = datetime.utcnow().strftime("%Y-%m-%d")
-                    recent = [v for v in vulns if v.get("dateAdded", "") >= today[:7]][:20]
-                    new_cves = len([v for v in vulns if v.get("dateAdded", "") == today])
+        data = resp.json().get("data", [])
+        # Deduplicate: keep best (highest score) per country+datasource
+        best: dict[str, dict] = {}
+        for event in data:
+            loc = event.get("location", "")
+            code = loc.split("/")[-1] if "/" in loc else loc
+            if code not in COUNTRY_GEO:
+                continue
+            geo = COUNTRY_GEO[code]
+            ds = event.get("datasource", "unknown")
+            key = f"{code}:{ds}"
+            score = event.get("score", 0) or 0
+            if key in best and best[key]["raw_score"] >= score:
+                continue
+            best[key] = {
+                "country_code": code,
+                "country_name": geo["name"],
+                "region": geo["region"],
+                "lat": geo["lat"],
+                "lon": geo["lon"],
+                "severity": _normalize_score(score),
+                "datasource": ds,
+                "start": event.get("start", 0),
+                "duration": event.get("duration", 0),
+                "raw_score": score,
+            }
+        return sorted(best.values(), key=lambda e: e["severity"], reverse=True)
 
-                    for v in recent:
-                        events.append({
-                            "type": "cve",
-                            "title": f"{v.get('cveID', 'N/A')}: {v.get('vulnerabilityName', '')}",
-                            "severity": "Critical" if "critical" in v.get("vulnerabilityName", "").lower() else "High",
-                            "source": "CISA KEV",
-                            "description": v.get("shortDescription", ""),
-                            "ioc_count": 1,
-                            "timestamp": v.get("dateAdded", ""),
-                        })
-                    total_iocs += len(recent)
-                    source_counts["cisa_kev"] = len(recent)
-            except Exception as e:
-                logger.error(f"[cyber] CISA KEV: {e}")
+    async def _fetch_ioda_alerts(self, client: httpx.AsyncClient) -> list[dict]:
+        """Fetch real-time outage alerts (critical only) for monitored countries."""
+        now = int(time.time())
+        params = {
+            "entityType": "country",
+            "from": now - IODA_ALERT_LOOKBACK,
+            "until": now,
+        }
+        try:
+            resp = await client.get(f"{IODA_API_BASE}/outages/alerts", params=params)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error(f"[cyber] IODA alerts: {e}")
+            return []
 
-            # Abuse.ch Feodo
-            try:
-                resp = await client.get(FEODO_URL)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    entries = data if isinstance(data, list) else data.get("data", data.get("entries", []))
-                    if isinstance(entries, list):
-                        active = entries[:20]
-                        active_campaigns = len(set(e.get("malware", "") for e in active if isinstance(e, dict)))
-                        for entry in active:
-                            if not isinstance(entry, dict):
-                                continue
-                            events.append({
-                                "type": "c2",
-                                "title": f"C2 Server: {entry.get('ip_address', entry.get('dst_ip', 'N/A'))}",
-                                "severity": "High",
-                                "source": "Abuse.ch Feodo",
-                                "description": f"Malware: {entry.get('malware', 'Unknown')} Port: {entry.get('dst_port', 'N/A')}",
-                                "ioc_count": 1,
-                                "timestamp": entry.get("first_seen", entry.get("date_added", "")),
-                            })
-                        total_iocs += len(active)
-                        source_counts["feodo"] = len(active)
-            except Exception as e:
-                logger.error(f"[cyber] Abuse.ch: {e}")
+        data = resp.json().get("data", [])
+        alerts = []
+        seen = set()
+        for alert in data:
+            if alert.get("level") != "critical":
+                continue
+            entity = alert.get("entity", {})
+            code = entity.get("code", "")
+            if code not in COUNTRY_GEO:
+                continue
+            ds = alert.get("datasource", "unknown")
+            key = f"{code}:{ds}"
+            if key in seen:
+                continue
+            seen.add(key)
+            geo = COUNTRY_GEO[code]
+            history = alert.get("historyValue", 0) or 1
+            value = alert.get("value", 0) or 0
+            drop_pct = max(0, (1 - value / history) * 100) if history > 0 else 0
+            alerts.append({
+                "country_code": code,
+                "country_name": geo["name"],
+                "region": geo["region"],
+                "lat": geo["lat"],
+                "lon": geo["lon"],
+                "datasource": ds,
+                "drop_pct": round(drop_pct, 1),
+                "time": alert.get("time", 0),
+            })
+        return alerts
 
-            # AlienVault OTX (if API key provided)
-            if OTX_API_KEY:
+    async def _fetch_watched_signals(self, client: httpx.AsyncClient) -> dict:
+        """Fetch real-time signal levels for watched countries.
+
+        Returns {country_code: {datasource: {values, pct_change_24h, pct_change_7d, status}}}
+        Uses 24h window for trend visualization and 7-day MA for sustained anomaly detection.
+        Watched countries also appear in outage events/alerts — both sources
+        together give a more complete threat picture.
+        """
+        now = int(time.time())
+        signals: dict[str, dict] = {}
+        signal_history = _load_signal_history()
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+
+        for code in IODA_WATCHED_COUNTRIES:
+            if code not in COUNTRY_GEO:
+                continue
+            geo = COUNTRY_GEO[code]
+            signals[code] = {"name": geo["name"], "lat": geo["lat"], "lon": geo["lon"],
+                             "region": geo["region"], "datasources": {}}
+
+            if code not in signal_history:
+                signal_history[code] = {}
+
+            for ds in IODA_SIGNAL_DATASOURCES:
                 try:
                     resp = await client.get(
-                        OTX_PULSE_URL,
-                        headers={"X-OTX-API-KEY": OTX_API_KEY},
-                        params={"limit": 10},
+                        f"{IODA_API_BASE}/signals/raw/country/{code}",
+                        params={
+                            "datasource": ds,
+                            "from": now - IODA_SIGNAL_LOOKBACK,
+                            "until": now,
+                            "maxPoints": IODA_SIGNAL_MAX_POINTS,
+                        },
                     )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        for pulse in data.get("results", [])[:10]:
-                            ioc_count = len(pulse.get("indicators", []))
-                            events.append({
-                                "type": "pulse",
-                                "title": pulse.get("name", "Unknown Pulse"),
-                                "severity": "Medium",
-                                "source": "AlienVault OTX",
-                                "description": pulse.get("description", "")[:200],
-                                "ioc_count": ioc_count,
-                                "timestamp": pulse.get("created", ""),
-                            })
-                            total_iocs += ioc_count
-                            source_counts["otx"] += ioc_count
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json().get("data", [])
+                    if not data:
+                        continue
+
+                    entry = _unwrap_ioda_signal(data)
+                    if not entry:
+                        logger.warning(f"[cyber] Signal {code}/{ds}: unexpected response shape")
+                        continue
+                    values = entry.get("values", [])
+                    if not values or not any(v is not None for v in values):
+                        continue
+
+                    valid = [v for v in values if v is not None]
+                    if len(valid) < 2:
+                        signals[code]["datasources"][ds] = {
+                            "current": valid[-1] if valid else 0,
+                            "pct_change_24h": 0,
+                            "pct_change_7d": 0,
+                            "status": "unknown",
+                            "values": values,
+                        }
+                        continue
+
+                    current = valid[-1]
+                    baseline_24h = sum(valid[:-1]) / len(valid[:-1])
+
+                    if baseline_24h == 0:
+                        pct_24h = 0.0
+                    else:
+                        pct_24h = round((current - baseline_24h) / baseline_24h * 100, 1)
+
+                    # Update today's daily average in history
+                    daily_avg = sum(valid) / len(valid)
+                    if ds not in signal_history[code]:
+                        signal_history[code][ds] = []
+                    history_entries = signal_history[code][ds]
+                    # Replace today's entry if exists, otherwise append
+                    history_entries = [e for e in history_entries if e["date"] != today]
+                    history_entries.append({"date": today, "avg": round(daily_avg, 2)})
+                    signal_history[code][ds] = history_entries
+
+                    # Compute 7-day MA (exclude today's partial)
+                    past_entries = [e for e in history_entries if e["date"] != today]
+                    if past_entries:
+                        baseline_7d = sum(e["avg"] for e in past_entries) / len(past_entries)
+                        pct_7d = round((current - baseline_7d) / baseline_7d * 100, 1) if baseline_7d else 0.0
+                    else:
+                        baseline_7d = baseline_24h  # Bootstrap: no history yet
+                        pct_7d = pct_24h
+
+                    # Classify health — use worse of both windows
+                    worst_pct = min(pct_24h, pct_7d)
+                    if worst_pct < -30:
+                        status = "critical"
+                    elif worst_pct < -15:
+                        status = "degraded"
+                    elif worst_pct < -5:
+                        status = "warning"
+                    else:
+                        status = "normal"
+
+                    signals[code]["datasources"][ds] = {
+                        "current": round(current, 1),
+                        "baseline_24h": round(baseline_24h, 1),
+                        "baseline_7d": round(baseline_7d, 1),
+                        "pct_change_24h": pct_24h,
+                        "pct_change_7d": pct_7d,
+                        "status": status,
+                        "values": [round(v, 1) if v is not None else None for v in values],
+                    }
                 except Exception as e:
-                    logger.error(f"[cyber] OTX: {e}")
+                    logger.error(f"[cyber] Signal {code}/{ds}: {e}")
 
-            # URLhaus malware URLs
+        _save_signal_history(signal_history)
+        return signals
+
+    async def _fetch_cyber_news(self, client: httpx.AsyncClient) -> list[dict]:
+        """Fetch cyber-specific RSS feeds (self-contained, not via NewsCollector)."""
+        self._seen_urls.clear()  # Reset each poll — show all recent articles
+        articles = []
+        for source, url in CYBER_NEWS_FEEDS.items():
             try:
-                urlhaus_events, urlhaus_count = await self._fetch_urlhaus(client)
-                events.extend(urlhaus_events)
-                total_iocs += urlhaus_count
-                source_counts["urlhaus"] = urlhaus_count
-            except Exception as e:
-                logger.error(f"[cyber] URLhaus: {e}")
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    logger.warning(f"[cyber] RSS {source} returned {resp.status_code}")
+                    continue
+                feed = feedparser.parse(resp.content)
+                for entry in feed.entries[:15]:
+                    pub_parsed = entry.get("published_parsed")
+                    if pub_parsed:
+                        pub_ts = calendar.timegm(pub_parsed)
+                        if time.time() - pub_ts > 24 * 3600:
+                            continue
+                    else:
+                        pub_ts = None
 
-            # Community C2 feed
+                    link = entry.get("link", "")
+                    url_hash = hashlib.sha256(link.encode()).hexdigest()[:16]
+                    if url_hash in self._seen_urls:
+                        continue
+                    self._seen_urls.add(url_hash)
+
+                    articles.append({
+                        "title": entry.get("title", ""),
+                        "url": link,
+                        "source": source,
+                        "published": entry.get("published", ""),
+                        "published_ts": pub_ts,
+                        "summary": (entry.get("summary", "") or "")[:300],
+                    })
+            except Exception as e:
+                logger.error(f"[cyber] RSS {source}: {e}")
+        articles.sort(key=lambda a: a.get("published_ts") or 0, reverse=True)
+        return articles[:50]
+
+    async def _fetch_cisa_kev(self, client: httpx.AsyncClient) -> tuple[list[dict], int]:
+        """Fetch CISA Known Exploited Vulnerabilities catalog."""
+        try:
+            resp = await client.get(CISA_KEV_URL)
+            if resp.status_code != 200:
+                logger.warning(f"[cyber] CISA KEV returned {resp.status_code}")
+                return [], 0
+            data = resp.json()
+            vulns = data.get("vulnerabilities", [])
+            today = datetime.utcnow().strftime("%Y-%m-%d")
+            this_month = today[:7]
+            recent = [v for v in vulns if v.get("dateAdded", "") >= this_month][:20]
+            new_today = len([v for v in vulns if v.get("dateAdded", "") == today])
+
+            cves = []
+            for v in recent:
+                cves.append({
+                    "cve_id": v.get("cveID", "N/A"),
+                    "title": v.get("vulnerabilityName", ""),
+                    "severity": "Critical" if "critical" in v.get("vulnerabilityName", "").lower() else "High",
+                    "description": v.get("shortDescription", "")[:200],
+                    "date_added": v.get("dateAdded", ""),
+                })
+            return cves, new_today
+        except Exception as e:
+            logger.error(f"[cyber] CISA KEV: {e}")
+            return [], 0
+
+    async def _correlate(self, outages: list[dict], articles: list[dict]) -> list[dict]:
+        """Check for IODA outage + cyber news geographic overlap. Send to LLM if found."""
+        correlations = []
+        for outage in outages:
+            if outage["severity"] < 3:
+                continue
+            country_lower = outage["country_name"].lower()
+            matches = [
+                a for a in articles
+                if country_lower in a["title"].lower()
+                or country_lower in a.get("summary", "").lower()
+            ]
+            if not matches:
+                continue
+
+            correlation = {
+                "country": outage["country_name"],
+                "region": outage["region"],
+                "outage_severity": outage["severity"],
+                "datasource": outage["datasource"],
+                "matched_articles": len(matches),
+                "article_titles": [a["title"] for a in matches[:3]],
+            }
+            correlations.append(correlation)
+
+            # Send to threat engine for LLM assessment
+            title = (
+                f"Internet disruption in {outage['country_name']} "
+                f"({outage['datasource']}, severity {outage['severity']}/10) "
+                f"with {len(matches)} related cyber news"
+            )
+            body = (
+                f"IODA detected a severity {outage['severity']}/10 internet disruption "
+                f"in {outage['country_name']} (datasource: {outage['datasource']}, "
+                f"duration: {outage['duration']}s). "
+                f"Related articles: {'; '.join(a['title'] for a in matches[:3])}"
+            )
             try:
-                c2intel_events, c2intel_count = await self._fetch_c2intel(client)
-                events.extend(c2intel_events)
-                total_iocs += c2intel_count
-                source_counts["c2intel"] = c2intel_count
+                import threat_engine
+                result = await threat_engine.assess(
+                    "cyber", title, body,
+                    extra={
+                        "geo_region": outage["region"],
+                        "country": outage["country_name"],
+                        "outage_severity": outage["severity"],
+                    },
+                )
+                if result:
+                    correlation["llm_assessment"] = result.get("summary", "")
+                    correlation["confidence"] = result.get("confidence", "unknown")
             except Exception as e:
-                logger.error(f"[cyber] C2IntelFeeds: {e}")
+                logger.error(f"[cyber] Correlation assess error: {e}")
 
-        effective_iocs = sum(min(count, 40) for count in source_counts.values())
+        return correlations
 
-        # Determine threat level without letting very large community feeds pin the score forever.
-        if effective_iocs > 120 or new_cves > 5:
-            threat_level = "Critical"
-        elif effective_iocs > 60 or new_cves > 2:
-            threat_level = "High"
-        elif effective_iocs > 20:
-            threat_level = "Medium"
-        else:
-            threat_level = "Low"
+    async def _backfill_signal_history(self, client: httpx.AsyncClient):
+        """Backfill missing 7-day signal history for watched countries."""
+        history = _load_signal_history()
+        now = int(time.time())
+        needed = False
 
-        # Add geopolitical escalation metadata before sorting and downstream scoring.
-        for event in events:
-            event.update(classify_event(event))
-            level = event.get("escalation_level", "background")
-            escalation_summary[level] = escalation_summary.get(level, 0) + 1
-            if event.get("war_signal"):
-                escalation_summary["war_signals"] += 1
+        for code in IODA_WATCHED_COUNTRIES:
+            if code not in COUNTRY_GEO:
+                continue
+            if code not in history:
+                history[code] = {}
 
-        # Sort by severity first, then escalation level.
-        severity_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-        escalation_order = {"strategic": 0, "elevated": 1, "background": 2}
-        events.sort(key=lambda e: (
-            severity_order.get(e.get("severity", "Low"), 3),
-            escalation_order.get(e.get("escalation_level", "background"), 2),
-        ))
+            for ds in IODA_SIGNAL_DATASOURCES:
+                if history.get(code, {}).get(ds):
+                    continue  # Already have history for this series
+                needed = True
+                try:
+                    resp = await client.get(
+                        f"{IODA_API_BASE}/signals/raw/country/{code}",
+                        params={
+                            "datasource": ds,
+                            "from": now - 7 * 86400,
+                            "until": now,
+                            "maxPoints": 7,
+                        },
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json().get("data", [])
+                    if not data:
+                        continue
 
-        cyber_cache.clear()
-        cyber_cache.extend(events)
-        stats_cache.update({
-            "total_iocs": total_iocs,
-            "active_campaigns": active_campaigns,
-            "new_cves": new_cves,
-            "threat_level": threat_level,
-            "source_counts": source_counts,
-            "escalation_summary": escalation_summary,
+                    entry = _unwrap_ioda_signal(data)
+                    if not entry:
+                        continue
+
+                    values = entry.get("values", [])
+                    if not any(v is not None for v in values):
+                        continue
+
+                    # Iterate with positional index to preserve date alignment
+                    entries = []
+                    for i, val in enumerate(values):
+                        if val is None:
+                            continue
+                        day = datetime.utcfromtimestamp(now - (len(values) - i) * 86400).strftime("%Y-%m-%d")
+                        entries.append({"date": day, "avg": round(val, 2)})
+
+                    history[code][ds] = entries
+                    logger.info(f"[cyber] Backfilled {code}/{ds}: {len(entries)} days")
+                except Exception as e:
+                    logger.error(f"[cyber] Backfill {code}/{ds}: {e}")
+
+        if needed:
+            _save_signal_history(history)
+
+    async def collect(self):
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT,
+            headers={"User-Agent": HTTP_USER_AGENT},
+        ) as client:
+            # One-time backfill of 7-day history on first run
+            await self._backfill_signal_history(client)
+
+            # Fetch all sources
+            outage_events = await self._fetch_ioda_events(client)
+            outage_alerts = await self._fetch_ioda_alerts(client)
+            watched_signals = await self._fetch_watched_signals(client)
+            cyber_news = await self._fetch_cyber_news(client)
+            cves, new_cve_count = await self._fetch_cisa_kev(client)
+
+        # Merge alerts into events (alerts are real-time, events are confirmed)
+        # Use events as primary, add alert-only countries
+        event_keys = {f"{e['country_code']}:{e['datasource']}" for e in outage_events}
+        for alert in outage_alerts:
+            key = f"{alert['country_code']}:{alert['datasource']}"
+            if key not in event_keys:
+                outage_events.append({
+                    "country_code": alert["country_code"],
+                    "country_name": alert["country_name"],
+                    "region": alert["region"],
+                    "lat": alert["lat"],
+                    "lon": alert["lon"],
+                    "severity": max(3, int(alert["drop_pct"] / 10)),
+                    "datasource": alert["datasource"],
+                    "start": alert.get("time", 0),
+                    "duration": 0,
+                    "raw_score": 0,
+                    "alert_drop_pct": alert["drop_pct"],
+                })
+
+        # Run correlation
+        correlations = await self._correlate(outage_events, cyber_news)
+
+        # Count feeds that returned data (for display)
+        feeds_ok = 0
+        if outage_events or outage_alerts:
+            feeds_ok += 1
+        if cyber_news:
+            feeds_ok += 1
+        if cves:
+            feeds_ok += 1
+
+        # Preserve last-known-good signals on transient failure
+        if not any(s.get("datasources") for s in watched_signals.values()):
+            watched_signals = cyber_cache.get("watched_signals", {})
+
+        now_iso = datetime.utcnow().isoformat() + "Z"
+
+        cyber_cache.update({
+            "outages": outage_events,
+            "cyber_news": cyber_news,
+            "cves": cves,
+            "stats": {
+                "active_outages": len(outage_events),
+                "countries_affected": len(set(o["country_code"] for o in outage_events)),
+                "new_cves": new_cve_count,
+                "feeds_ok": feeds_ok,
+            },
+            "correlations": correlations,
+            "watched_signals": watched_signals,
+            "last_updated": now_iso,
         })
 
-        # Persist to DB
-        if self.db_session_factory:
-            try:
-                from database import ThreatEvent
-                db = self.db_session_factory()
-                try:
-                    for e in events[:50]:
-                        db.add(ThreatEvent(
-                            event_type=e["type"],
-                            title=e["title"],
-                            severity=e["severity"],
-                            source=e["source"],
-                            description=e.get("description", ""),
-                            ioc_count=e.get("ioc_count", 0),
-                        ))
-                    db.commit()
-                finally:
-                    db.close()
-            except Exception as e:
-                logger.error(f"[cyber] DB persist error: {e}")
+        await manager.broadcast("cyber", cyber_cache)
 
-        # If every feed failed, signal failure so freshness tracker doesn't show false green
-        feeds_with_data = sum(1 for c in source_counts.values() if c > 0)
-        if feeds_with_data == 0:
+        sig_count = sum(len(s.get("datasources", {})) for s in watched_signals.values())
+        logger.info(
+            f"[cyber] {len(outage_events)} outages, {len(cyber_news)} articles, "
+            f"{len(cves)} CVEs, {len(correlations)} correlations, {feeds_ok}/3 feeds ok, "
+            f"{len(watched_signals)} watched ({sig_count} signals)"
+        )
+
+        # Only raise if every HTTP call failed (not just empty results)
+        if feeds_ok == 0 and not watched_signals:
             raise RuntimeError("All cyber feeds returned zero data")
 
-        await manager.broadcast("cyber", {"events": events, "stats": stats_cache})
-        logger.info(f"[cyber] {len(events)} events, {total_iocs} IOCs, {feeds_with_data}/5 feeds ok")
-
-        # Threat engine assessment
-        import threat_engine
-        for e in events:
-            should_assess = (
-                e.get("escalation_level") in ("elevated", "strategic") or
-                (e.get("source") in {"CISA KEV", "AlienVault OTX"} and e.get("severity") in ("Critical", "High"))
-            )
-            if should_assess:
-                try:
-                    await threat_engine.assess("cyber", e["title"], e.get("description", ""),
-                                               extra={
-                                                   "severity": e["severity"],
-                                                   "geo_region": e.get("geo_region"),
-                                                   "escalation_level": e.get("escalation_level"),
-                                                   "escalation_score": e.get("escalation_score"),
-                                                   "target_sector": e.get("target_sector"),
-                                                   "attribution_confidence": e.get("attribution_confidence"),
-                                                   "war_signal": e.get("war_signal"),
-                                               })
-                except Exception as ex:
-                    logger.error(f"[cyber] Threat assess error: {ex}")
-        return events
+        return cyber_cache

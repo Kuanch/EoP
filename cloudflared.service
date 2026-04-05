@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/cloudflared tunnel run fastapi-login
+ExecStart=/usr/local/bin/cloudflared tunnel run eop-tunnel
 Restart=always
 RestartSec=5
 StandardOutput=journal
